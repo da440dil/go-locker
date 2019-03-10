@@ -3,8 +3,10 @@ package locker
 
 import (
 	"context"
-	"crypto/rand"
+	crand "crypto/rand"
 	"encoding/base64"
+	"math"
+	mrand "math/rand"
 	"sync"
 	"time"
 )
@@ -42,29 +44,32 @@ type Storage interface {
 
 // Params defines parameters for creating new Locker.
 type Params struct {
-	TTL        time.Duration // TTL of key (required).
-	RetryCount int           // Maximum number of retries if key is locked (optional).
-	RetryDelay time.Duration // Delay between retries if key is locked (optional).
-	Prefix     string        // Prefix of key (optional).
+	TTL         time.Duration // TTL of key (required).
+	RetryCount  uint64        // Maximum number of retries if key is locked (optional).
+	RetryDelay  time.Duration // Delay between retries if key is locked (optional).
+	RetryJitter time.Duration // Maximum time randomly added to delays between retries to improve performance under high contention (optional).
+	Prefix      string        // Prefix of key (optional).
 }
 
 // NewLocker allocates and returns new Locker.
 func NewLocker(storage Storage, params Params) Locker {
 	return &factory{
-		storage:    storage,
-		ttl:        params.TTL,
-		retryCount: params.RetryCount,
-		retryDelay: params.RetryDelay,
-		prefix:     params.Prefix,
+		storage:     storage,
+		ttl:         params.TTL,
+		retryCount:  params.RetryCount,
+		retryDelay:  params.RetryDelay,
+		retryJitter: params.RetryJitter,
+		prefix:      params.Prefix,
 	}
 }
 
 type factory struct {
-	storage    Storage
-	ttl        time.Duration
-	retryCount int
-	retryDelay time.Duration
-	prefix     string
+	storage     Storage
+	ttl         time.Duration
+	retryCount  uint64
+	retryDelay  time.Duration
+	retryJitter time.Duration
+	prefix      string
 }
 
 func (f *factory) NewLock(key string) Lock {
@@ -122,11 +127,13 @@ func (l *locker) create(ctx context.Context) (int64, error) {
 	return l.insert(ctx, token, l.f.retryCount)
 }
 
-func (l *locker) insert(ctx context.Context, token string, counter int) (int64, error) {
+var rnd = mrand.New(mrand.NewSource(time.Now().UnixNano()))
+
+func (l *locker) insert(ctx context.Context, token string, counter uint64) (int64, error) {
 	var (
-		i   int64
-		err error
-		t   *time.Timer
+		i     int64
+		err   error
+		timer *time.Timer
 	)
 	for {
 		i, err = l.f.storage.Insert(l.key, token, l.f.ttl)
@@ -140,19 +147,20 @@ func (l *locker) insert(ctx context.Context, token string, counter int) (int64, 
 		if counter <= 0 {
 			return i, nil
 		}
-		counter--
 
-		if t == nil {
-			t = time.NewTimer(l.f.retryDelay)
-			defer t.Stop()
+		counter--
+		timeout := time.Duration(math.Max(0, float64(l.f.retryDelay)+math.Floor((rnd.Float64()*2-1)*float64(l.f.retryJitter))))
+		if timer == nil {
+			timer = time.NewTimer(timeout)
+			defer timer.Stop()
 		} else {
-			t.Reset(l.f.retryDelay)
+			timer.Reset(timeout)
 		}
 
 		select {
 		case <-ctx.Done():
 			return i, nil
-		case <-t.C:
+		case <-timer.C:
 		}
 	}
 }
@@ -171,7 +179,7 @@ func (l *locker) update(ctx context.Context) (int64, error) {
 
 func newToken() (string, error) {
 	buf := make([]byte, 16)
-	_, err := rand.Read(buf)
+	_, err := crand.Read(buf)
 	if err != nil {
 		return "", err
 	}
