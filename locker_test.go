@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	rs "github.com/da440dil/locker/redis"
+	rs "github.com/da440dil/go-locker/redis"
 	rd "github.com/go-redis/redis"
 	"github.com/stretchr/testify/assert"
 )

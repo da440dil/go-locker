@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/da440dil/locker"
-	storage "github.com/da440dil/locker/redis"
+	"github.com/da440dil/go-locker"
+	storage "github.com/da440dil/go-locker/redis"
 	"github.com/go-redis/redis"
 )
 
