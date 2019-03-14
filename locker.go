@@ -11,24 +11,7 @@ import (
 	"time"
 )
 
-// Locker defines parameters for creating new Lock.
-type Locker interface {
-	// NewLock allocates and returns new Lock.
-	NewLock(key string) Lock
-}
-
-// Lock implements distributed locking.
-type Lock interface {
-	// Lock applies the lock, returns -1 on success, ttl in milliseconds on failure.
-	Lock() (int64, error)
-	// LockWithContext applies the lock, returns -1 on success, ttl in milliseconds on failure,
-	// context allows cancelling lock attempts prematurely.
-	LockWithContext(ctx context.Context) (int64, error)
-	// Unlock releases the lock, returns true on success.
-	Unlock() (bool, error)
-}
-
-// Storage imlements key value storage.
+// Storage implements key value storage.
 type Storage interface {
 	// Insert sets key value and ttl of key if key value not exists,
 	// returns -1 on success, ttl in milliseconds on failure.
@@ -52,8 +35,8 @@ type Params struct {
 }
 
 // NewLocker allocates and returns new Locker.
-func NewLocker(storage Storage, params Params) Locker {
-	return &factory{
+func NewLocker(storage Storage, params Params) *Locker {
+	return &Locker{
 		storage:     storage,
 		ttl:         params.TTL,
 		retryCount:  params.RetryCount,
@@ -63,7 +46,8 @@ func NewLocker(storage Storage, params Params) Locker {
 	}
 }
 
-type factory struct {
+// Locker defines parameters for creating new Lock.
+type Locker struct {
 	storage     Storage
 	ttl         time.Duration
 	retryCount  uint64
@@ -72,31 +56,45 @@ type factory struct {
 	prefix      string
 }
 
-func (f *factory) NewLock(key string) Lock {
-	return &locker{
+var emptyCtx = context.Background()
+
+// New allocates and returns new Lock.
+func (f *Locker) New(key string) *Lock {
+	return f.WithContext(emptyCtx, key)
+}
+
+// WithContext allocates and returns new Lock.
+// Context allows cancelling lock attempts prematurely.
+func (f *Locker) WithContext(ctx context.Context, key string) *Lock {
+	return &Lock{
 		f:   f,
+		ctx: ctx,
 		key: f.prefix + key,
 	}
 }
 
-type locker struct {
-	f     *factory
+// Lock implements distributed locking.
+type Lock struct {
+	f     *Locker
+	ctx   context.Context
 	key   string
 	token string
 	mutex sync.Mutex
 }
 
-var emptyCtx = context.Background()
+// Lock applies the lock, returns -1 on success, ttl in milliseconds on failure.
+func (l *Lock) Lock() (int64, error) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
 
-func (l *locker) Lock() (int64, error) {
-	return l.lock(emptyCtx)
+	if l.token == "" {
+		return l.create(l.ctx)
+	}
+	return l.update(l.ctx)
 }
 
-func (l *locker) LockWithContext(ctx context.Context) (int64, error) {
-	return l.lock(ctx)
-}
-
-func (l *locker) Unlock() (bool, error) {
+// Unlock releases the lock, returns true on success.
+func (l *Lock) Unlock() (bool, error) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
@@ -109,17 +107,7 @@ func (l *locker) Unlock() (bool, error) {
 	return l.f.storage.Remove(l.key, token)
 }
 
-func (l *locker) lock(ctx context.Context) (int64, error) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	if l.token == "" {
-		return l.create(ctx)
-	}
-	return l.update(ctx)
-}
-
-func (l *locker) create(ctx context.Context) (int64, error) {
+func (l *Lock) create(ctx context.Context) (int64, error) {
 	token, err := newToken()
 	if err != nil {
 		return -2, err
@@ -129,7 +117,7 @@ func (l *locker) create(ctx context.Context) (int64, error) {
 
 var rnd = mrand.New(mrand.NewSource(time.Now().UnixNano()))
 
-func (l *locker) insert(ctx context.Context, token string, counter uint64) (int64, error) {
+func (l *Lock) insert(ctx context.Context, token string, counter uint64) (int64, error) {
 	var (
 		i     int64
 		err   error
@@ -165,7 +153,7 @@ func (l *locker) insert(ctx context.Context, token string, counter uint64) (int6
 	}
 }
 
-func (l *locker) update(ctx context.Context) (int64, error) {
+func (l *Lock) update(ctx context.Context) (int64, error) {
 	i, err := l.f.storage.Upsert(l.key, l.token, l.f.ttl)
 	if err != nil {
 		return i, err

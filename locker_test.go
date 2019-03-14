@@ -28,7 +28,7 @@ func TestRedis(t *testing.T) {
 
 	st := rs.NewStorage(client)
 
-	t.Run("Lock", func(t *testing.T) {
+	t.Run("New", func(t *testing.T) {
 		if err := client.Del(key).Err(); err != nil {
 			t.Fatal("redis del failed")
 		}
@@ -43,7 +43,7 @@ func TestRedis(t *testing.T) {
 			TTL: ttl,
 		})
 
-		l1 := f.NewLock(key)
+		l1 := f.New(key)
 
 		v, err = l1.Lock()
 		assert.NoError(t, err)
@@ -53,7 +53,7 @@ func TestRedis(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, v == -1)
 
-		l2 := f.NewLock(key)
+		l2 := f.New(key)
 
 		v, err = l2.Lock()
 		assert.NoError(t, err)
@@ -76,7 +76,7 @@ func TestRedis(t *testing.T) {
 		assert.True(t, ok)
 	})
 
-	t.Run("Lock with context", func(t *testing.T) {
+	t.Run("WithContext", func(t *testing.T) {
 		if err := client.Del(key).Err(); err != nil {
 			t.Fatal("redis del failed")
 		}
@@ -97,22 +97,22 @@ func TestRedis(t *testing.T) {
 			RetryDelay: retryDelay,
 		})
 
-		l1 := f.NewLock(key)
 		ctx1 := context.Background()
+		l1 := f.WithContext(ctx1, key)
 
-		v, err = l1.LockWithContext(ctx1)
+		v, err = l1.Lock()
 		assert.NoError(t, err)
 		assert.True(t, v == -1)
 
-		v, err = l1.LockWithContext(ctx1)
+		v, err = l1.Lock()
 		assert.NoError(t, err)
 		assert.True(t, v == -1)
 
-		l2 := f.NewLock(key)
 		ctx2, cancel := context.WithTimeout(context.Background(), time.Millisecond*300)
 		defer cancel()
+		l2 := f.WithContext(ctx2, key)
 
-		v, err = l2.LockWithContext(ctx2)
+		v, err = l2.Lock()
 		assert.NoError(t, err)
 		assert.True(t, v >= 0 && v <= int64(ttl))
 
@@ -124,7 +124,7 @@ func TestRedis(t *testing.T) {
 		assert.NoError(t, err)
 		assert.False(t, ok)
 
-		v, err = l2.LockWithContext(ctx2)
+		v, err = l2.Lock()
 		assert.NoError(t, err)
 		assert.True(t, v == -1)
 
@@ -133,7 +133,7 @@ func TestRedis(t *testing.T) {
 		assert.True(t, ok)
 	})
 
-	t.Run("Lock parallel", func(t *testing.T) {
+	t.Run("New Parallel", func(t *testing.T) {
 		if err := client.Del(key).Err(); err != nil {
 			t.Fatal("redis del failed")
 		}
@@ -155,7 +155,7 @@ func TestRedis(t *testing.T) {
 			var err error
 			var v int64
 			var ok bool
-			l := f.NewLock(key)
+			l := f.New(key)
 			v, err = l.Lock()
 			assert.NoError(t, err)
 			assert.True(t, v == -1)
@@ -168,7 +168,7 @@ func TestRedis(t *testing.T) {
 		t.Run("Parallel 3", fn)
 	})
 
-	t.Run("Lock with context parallel", func(t *testing.T) {
+	t.Run("WithContext Parallel", func(t *testing.T) {
 		if err := client.Del(key).Err(); err != nil {
 			t.Fatal("redis del failed")
 		}
@@ -192,8 +192,8 @@ func TestRedis(t *testing.T) {
 			var err error
 			var v int64
 			var ok bool
-			l := f.NewLock(key)
-			v, err = l.LockWithContext(ctx)
+			l := f.WithContext(ctx, key)
+			v, err = l.Lock()
 			assert.NoError(t, err)
 			assert.True(t, v == -1)
 			ok, err = l.Unlock()
@@ -238,7 +238,7 @@ func BenchmarkRedis(b *testing.B) {
 
 		keyslen := len(keys)
 		for i := 0; i < b.N; i++ {
-			l := f.NewLock(keys[i%keyslen])
+			l := f.New(keys[i%keyslen])
 			_, err := l.Lock()
 			if err != nil {
 				b.Error(err)
