@@ -38,12 +38,12 @@ func main() {
 	})
 	// Create first lock
 	lock1 := Lock{
-		lock: locker.NewLock(key),
+		lock: locker.New(key),
 		id:   1,
 	}
 	// Create second lock
 	lock2 := Lock{
-		lock: locker.NewLock(key),
+		lock: locker.New(key),
 		id:   2,
 	}
 
@@ -59,7 +59,7 @@ func main() {
 }
 
 type Lock struct {
-	lock locker.Lock
+	lock *locker.Lock
 	id   int
 }
 
@@ -87,3 +87,5 @@ func (l Lock) Unlock() {
 	}
 }
 ```
+
+Inspired by [redis-lock](https://github.com/bsm/redis-lock) package.
