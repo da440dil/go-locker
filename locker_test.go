@@ -28,7 +28,7 @@ func TestRedis(t *testing.T) {
 
 	st := rs.NewStorage(client)
 
-	t.Run("New", func(t *testing.T) {
+	t.Run("NewLock", func(t *testing.T) {
 		if err := client.Del(key).Err(); err != nil {
 			t.Fatal("redis del failed")
 		}
@@ -43,7 +43,7 @@ func TestRedis(t *testing.T) {
 			TTL: ttl,
 		})
 
-		l1 := f.New(key)
+		l1 := f.NewLock(key)
 
 		v, err = l1.Lock()
 		assert.NoError(t, err)
@@ -53,7 +53,7 @@ func TestRedis(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, v == -1)
 
-		l2 := f.New(key)
+		l2 := f.NewLock(key)
 
 		v, err = l2.Lock()
 		assert.NoError(t, err)
@@ -76,7 +76,7 @@ func TestRedis(t *testing.T) {
 		assert.True(t, ok)
 	})
 
-	t.Run("WithContext", func(t *testing.T) {
+	t.Run("NewLockWithContext", func(t *testing.T) {
 		if err := client.Del(key).Err(); err != nil {
 			t.Fatal("redis del failed")
 		}
@@ -98,7 +98,7 @@ func TestRedis(t *testing.T) {
 		})
 
 		ctx1 := context.Background()
-		l1 := f.WithContext(ctx1, key)
+		l1 := f.NewLockWithContext(ctx1, key)
 
 		v, err = l1.Lock()
 		assert.NoError(t, err)
@@ -110,7 +110,7 @@ func TestRedis(t *testing.T) {
 
 		ctx2, cancel := context.WithTimeout(context.Background(), time.Millisecond*300)
 		defer cancel()
-		l2 := f.WithContext(ctx2, key)
+		l2 := f.NewLockWithContext(ctx2, key)
 
 		v, err = l2.Lock()
 		assert.NoError(t, err)
@@ -133,7 +133,7 @@ func TestRedis(t *testing.T) {
 		assert.True(t, ok)
 	})
 
-	t.Run("New Parallel", func(t *testing.T) {
+	t.Run("NewLock Parallel", func(t *testing.T) {
 		if err := client.Del(key).Err(); err != nil {
 			t.Fatal("redis del failed")
 		}
@@ -155,7 +155,7 @@ func TestRedis(t *testing.T) {
 			var err error
 			var v int64
 			var ok bool
-			l := f.New(key)
+			l := f.NewLock(key)
 			v, err = l.Lock()
 			assert.NoError(t, err)
 			assert.True(t, v == -1)
@@ -168,7 +168,7 @@ func TestRedis(t *testing.T) {
 		t.Run("Parallel 3", fn)
 	})
 
-	t.Run("WithContext Parallel", func(t *testing.T) {
+	t.Run("NewLockWithContext Parallel", func(t *testing.T) {
 		if err := client.Del(key).Err(); err != nil {
 			t.Fatal("redis del failed")
 		}
@@ -192,7 +192,7 @@ func TestRedis(t *testing.T) {
 			var err error
 			var v int64
 			var ok bool
-			l := f.WithContext(ctx, key)
+			l := f.NewLockWithContext(ctx, key)
 			v, err = l.Lock()
 			assert.NoError(t, err)
 			assert.True(t, v == -1)
@@ -238,7 +238,7 @@ func BenchmarkRedis(b *testing.B) {
 
 		keyslen := len(keys)
 		for i := 0; i < b.N; i++ {
-			l := f.New(keys[i%keyslen])
+			l := f.NewLock(keys[i%keyslen])
 			_, err := l.Lock()
 			if err != nil {
 				b.Error(err)

@@ -58,14 +58,14 @@ type Locker struct {
 
 var emptyCtx = context.Background()
 
-// New allocates and returns new Lock.
-func (f *Locker) New(key string) *Lock {
-	return f.WithContext(emptyCtx, key)
+// NewLock allocates and returns new Lock.
+func (f *Locker) NewLock(key string) *Lock {
+	return f.NewLockWithContext(emptyCtx, key)
 }
 
-// WithContext allocates and returns new Lock.
+// NewLockWithContext allocates and returns new Lock.
 // Context allows cancelling lock attempts prematurely.
-func (f *Locker) WithContext(ctx context.Context, key string) *Lock {
+func (f *Locker) NewLockWithContext(ctx context.Context, key string) *Lock {
 	return &Lock{
 		f:   f,
 		ctx: ctx,
@@ -115,7 +115,7 @@ func (l *Lock) create(ctx context.Context) (int64, error) {
 	return l.insert(ctx, token, l.f.retryCount)
 }
 
-var rnd = mrand.New(mrand.NewSource(time.Now().UnixNano()))
+var random = mrand.New(mrand.NewSource(time.Now().UnixNano()))
 
 func (l *Lock) insert(ctx context.Context, token string, counter uint64) (int64, error) {
 	var (
@@ -137,7 +137,7 @@ func (l *Lock) insert(ctx context.Context, token string, counter uint64) (int64,
 		}
 
 		counter--
-		timeout := time.Duration(math.Max(0, float64(l.f.retryDelay)+math.Floor((rnd.Float64()*2-1)*float64(l.f.retryJitter))))
+		timeout := time.Duration(math.Max(0, float64(l.f.retryDelay)+math.Floor((random.Float64()*2-1)*float64(l.f.retryJitter))))
 		if timer == nil {
 			timer = time.NewTimer(timeout)
 			defer timer.Stop()
