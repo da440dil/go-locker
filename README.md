@@ -38,12 +38,12 @@ func main() {
 	})
 	// Create first lock
 	lock1 := Lock{
-		lock: locker.New(key),
+		lock: locker.NewLock(key),
 		id:   1,
 	}
 	// Create second lock
 	lock2 := Lock{
-		lock: locker.New(key),
+		lock: locker.NewLock(key),
 		id:   2,
 	}
 
