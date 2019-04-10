@@ -40,8 +40,8 @@ func NewLocker(storage Storage, params Params) *Locker {
 		storage:     storage,
 		ttl:         params.TTL,
 		retryCount:  params.RetryCount,
-		retryDelay:  params.RetryDelay,
-		retryJitter: params.RetryJitter,
+		retryDelay:  float64(params.RetryDelay),
+		retryJitter: float64(params.RetryJitter),
 		prefix:      params.Prefix,
 	}
 }
@@ -51,8 +51,8 @@ type Locker struct {
 	storage     Storage
 	ttl         time.Duration
 	retryCount  uint64
-	retryDelay  time.Duration
-	retryJitter time.Duration
+	retryDelay  float64
+	retryJitter float64
 	prefix      string
 }
 
@@ -137,7 +137,7 @@ func (l *Lock) insert(ctx context.Context, token string, counter uint64) (int64,
 		}
 
 		counter--
-		timeout := time.Duration(math.Max(0, float64(l.f.retryDelay)+math.Floor((random.Float64()*2-1)*float64(l.f.retryJitter))))
+		timeout := time.Duration(math.Max(0, l.f.retryDelay+math.Floor((random.Float64()*2-1)*l.f.retryJitter)))
 		if timer == nil {
 			timer = time.NewTimer(timeout)
 			defer timer.Stop()
