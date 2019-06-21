@@ -1,44 +1,70 @@
-// Package locker contains functions and data structures for distributed locking.
+// Package locker provides functions for distributed locking.
 package locker
 
 import (
 	"context"
-	crand "crypto/rand"
-	"encoding/base64"
-	"math"
-	mrand "math/rand"
-	"sync"
+	"errors"
 	"time"
+
+	gw "github.com/da440dil/go-locker/redis"
+	"github.com/go-redis/redis"
 )
 
-// Storage implements key value storage.
-type Storage interface {
-	// Insert sets key value and ttl of key if key value not exists,
-	// returns -1 on success, ttl in milliseconds on failure.
-	Insert(key, value string, ttl time.Duration) (int64, error)
-	// Upsert sets key value and ttl of key if key value not exists,
-	// updates ttl of key if key value equals value,
-	// returns -1 on success, ttl in milliseconds on failure.
-	Upsert(key, value string, ttl time.Duration) (int64, error)
-	// Remove deletes key if key value exists,
-	// returns true on success.
+// Gateway to storage to store a lock state.
+type Gateway interface {
+	// Inserts key value and ttl of key if key value not exists.
+	// Returns -1 on success, ttl in milliseconds on failure.
+	Insert(key, value string, ttl int64) (int64, error)
+	// Inserts key value and ttl of key if key value not exists.
+	// Updates ttl of key if key value equals input value.
+	// Returns -1 on success, ttl in milliseconds on failure.
+	Upsert(key, value string, ttl int64) (int64, error)
+	// Removes key if key value equals input value.
+	// Returns true on success, false on failure.
 	Remove(key, value string) (bool, error)
 }
 
 // Params defines parameters for creating new Locker.
 type Params struct {
-	TTL         time.Duration // TTL of key (required).
-	RetryCount  uint64        // Maximum number of retries if key is locked (optional).
-	RetryDelay  time.Duration // Delay between retries if key is locked (optional).
-	RetryJitter time.Duration // Maximum time randomly added to delays between retries to improve performance under high contention (optional).
-	Prefix      string        // Prefix of key (optional).
+	// TTL of a key. Must be greater than or equal to 1 millisecond.
+	TTL time.Duration
+	// Maximum number of retries if key is locked. Must be greater than or equal to 0. By default equals 0.
+	RetryCount int64
+	// Delay between retries if key is locked. Must be greater than or equal to 1 millisecond. By default equals 0.
+	RetryDelay time.Duration
+	// Maximum time randomly added to delays between retries to improve performance under high contention.
+	// Must be greater than or equal to 1 millisecond. By default equals 0.
+	RetryJitter time.Duration
+	// Prefix of a key. Optional.
+	Prefix string
 }
 
-// NewLocker allocates and returns new Locker.
-func NewLocker(storage Storage, params Params) *Locker {
+var errInvalidTTL = errors.New("TTL must be greater than or equal to 1 millisecond")
+var errInvalidRetryCount = errors.New("RetryCount must be greater than or equal to zero")
+var errInvalidRetryDelay = errors.New("RetryDelay must be greater than or equal to 1 millisecond")
+var errInvalidRetryJitter = errors.New("RetryJitter must be greater than or equal to 1 millisecond")
+
+func (p Params) validate() {
+	if p.TTL < time.Millisecond {
+		panic(errInvalidTTL)
+	}
+	if p.RetryCount < 0 {
+		panic(errInvalidRetryCount)
+	}
+	if p.RetryDelay != 0 && p.RetryDelay < time.Millisecond {
+		panic(errInvalidRetryDelay)
+	}
+	if p.RetryJitter != 0 && p.RetryJitter < time.Millisecond {
+		panic(errInvalidRetryJitter)
+	}
+}
+
+// WithGateway creates new Locker using custom Gateway.
+func WithGateway(gateway Gateway, params Params) *Locker {
+	params.validate()
 	return &Locker{
-		storage:     storage,
-		ttl:         params.TTL,
+		gateway:     gateway,
+		ttl:         durationToMilliseconds(params.TTL),
 		retryCount:  params.RetryCount,
 		retryDelay:  float64(params.RetryDelay),
 		retryJitter: float64(params.RetryJitter),
@@ -46,11 +72,16 @@ func NewLocker(storage Storage, params Params) *Locker {
 	}
 }
 
+// NewLocker creates new Locker using Redis Gateway.
+func NewLocker(client *redis.Client, params Params) *Locker {
+	return WithGateway(gw.NewGateway(client), params)
+}
+
 // Locker defines parameters for creating new Lock.
 type Locker struct {
-	storage     Storage
-	ttl         time.Duration
-	retryCount  uint64
+	gateway     Gateway
+	ttl         int64
+	retryCount  int64
 	retryDelay  float64
 	retryJitter float64
 	prefix      string
@@ -58,118 +89,69 @@ type Locker struct {
 
 var emptyCtx = context.Background()
 
-// NewLock allocates and returns new Lock.
-func (f *Locker) NewLock(key string) *Lock {
-	return f.NewLockWithContext(emptyCtx, key)
+// NewLock creates new Lock.
+func (l *Locker) NewLock(key string) *Lock {
+	return l.WithContext(emptyCtx, key)
 }
 
-// NewLockWithContext allocates and returns new Lock.
+// WithContext creates new Lock.
 // Context allows cancelling lock attempts prematurely.
-func (f *Locker) NewLockWithContext(ctx context.Context, key string) *Lock {
+func (l *Locker) WithContext(ctx context.Context, key string) *Lock {
 	return &Lock{
-		f:   f,
-		ctx: ctx,
-		key: f.prefix + key,
+		locker: l,
+		ctx:    ctx,
+		key:    l.prefix + key,
 	}
 }
 
-// Lock implements distributed locking.
-type Lock struct {
-	f     *Locker
-	ctx   context.Context
-	key   string
-	token string
-	mutex sync.Mutex
+// Lock creates and applies new Lock. Returns TTLError if Lock failed to lock the key.
+func (l *Locker) Lock(key string) (*Lock, error) {
+	return l.LockWithContext(emptyCtx, key)
 }
 
-// Lock applies the lock, returns -1 on success, ttl in milliseconds on failure.
-func (l *Lock) Lock() (int64, error) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	if l.token == "" {
-		return l.create(l.ctx)
-	}
-	return l.update(l.ctx)
-}
-
-// Unlock releases the lock, returns true on success.
-func (l *Lock) Unlock() (bool, error) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	if l.token == "" {
-		return false, nil
-	}
-
-	token := l.token
-	l.token = ""
-	return l.f.storage.Remove(l.key, token)
-}
-
-func (l *Lock) create(ctx context.Context) (int64, error) {
-	token, err := newToken()
+// LockWithContext creates and applies new Lock.
+// Context allows cancelling lock attempts prematurely.
+// Returns TTLError if Lock failed to lock the key.
+func (l *Locker) LockWithContext(ctx context.Context, key string) (*Lock, error) {
+	lock := l.WithContext(ctx, key)
+	ttl, err := lock.Lock()
 	if err != nil {
-		return -2, err
+		return lock, err
 	}
-	return l.insert(ctx, token, l.f.retryCount)
+	if ttl != -1 {
+		return lock, newTTLError(ttl)
+	}
+	return lock, nil
 }
 
-var random = mrand.New(mrand.NewSource(time.Now().UnixNano()))
-
-func (l *Lock) insert(ctx context.Context, token string, counter uint64) (int64, error) {
-	var (
-		i     int64
-		err   error
-		timer *time.Timer
-	)
-	for {
-		i, err = l.f.storage.Insert(l.key, token, l.f.ttl)
-		if err != nil {
-			return i, err
-		}
-		if i == -1 {
-			l.token = token
-			return i, nil
-		}
-		if counter <= 0 {
-			return i, nil
-		}
-
-		counter--
-		timeout := time.Duration(math.Max(0, l.f.retryDelay+math.Floor((random.Float64()*2-1)*l.f.retryJitter)))
-		if timer == nil {
-			timer = time.NewTimer(timeout)
-			defer timer.Stop()
-		} else {
-			timer.Reset(timeout)
-		}
-
-		select {
-		case <-ctx.Done():
-			return i, nil
-		case <-timer.C:
-		}
-	}
+func durationToMilliseconds(duration time.Duration) int64 {
+	return int64(duration / time.Millisecond)
 }
 
-func (l *Lock) update(ctx context.Context) (int64, error) {
-	i, err := l.f.storage.Upsert(l.key, l.token, l.f.ttl)
-	if err != nil {
-		return i, err
-	}
-	if i == -1 {
-		return i, nil
-	}
-	l.token = ""
-	return l.create(ctx)
+func millisecondsToDuration(ttl int64) time.Duration {
+	return time.Duration(ttl) * time.Millisecond
 }
 
-func newToken() (string, error) {
-	buf := make([]byte, 16)
-	_, err := crand.Read(buf)
-	if err != nil {
-		return "", err
-	}
-	return base64.URLEncoding.EncodeToString(buf), nil
+// TTLError is the error returned when Lock failed to lock the key.
+type TTLError interface {
+	Error() string
+	TTL() time.Duration // Returns TTL of a key.
+}
+
+var errTooManyRequests = errors.New("Too Many Requests")
+
+type ttlError struct {
+	ttl time.Duration
+}
+
+func newTTLError(ttl int64) *ttlError {
+	return &ttlError{millisecondsToDuration(ttl)}
+}
+
+func (e *ttlError) Error() string {
+	return errTooManyRequests.Error()
+}
+
+func (e *ttlError) TTL() time.Duration {
+	return e.ttl
 }
