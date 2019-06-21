@@ -24,6 +24,7 @@ func main() {
 		client,
 		locker.Params{TTL: time.Millisecond * 100},
 	)
+
 	var wg sync.WaitGroup
 	handle := func(lk *locker.Lock, err error) {
 		if err == nil {

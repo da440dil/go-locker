@@ -2,6 +2,7 @@ package locker_test
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/da440dil/go-locker"
@@ -16,9 +17,12 @@ func Example() {
 		client,
 		locker.Params{TTL: time.Millisecond * 100},
 	)
+
+	var wg sync.WaitGroup
 	handle := func(lk *locker.Lock, err error) {
 		if err == nil {
 			fmt.Println("Locker has locked the key")
+			wg.Add(1)
 			go func() {
 				time.Sleep(time.Millisecond * 50)
 				ok, err := lk.Unlock()
@@ -30,6 +34,7 @@ func Example() {
 				} else {
 					fmt.Println("Locker has failed to unlock the key")
 				}
+				wg.Done()
 			}()
 		} else {
 			if e, ok := err.(locker.TTLError); ok {
@@ -43,4 +48,9 @@ func Example() {
 	key := "key"
 	handle(lkr.Lock(key))
 	handle(lkr.Lock(key))
+	wg.Wait()
+	// Output:
+	// Locker has locked the key
+	// Locker has failed to lock the key, retry after 100ms
+	// Locker has unlocked the key
 }
