@@ -192,6 +192,6 @@ func TestParams(t *testing.T) {
 func TestTTLError(t *testing.T) {
 	vErr := int64(42)
 	err := newTTLError(vErr)
-	assert.EqualError(t, err, errTooManyRequests.Error())
+	assert.EqualError(t, err, errConflict.Error())
 	assert.Equal(t, time.Duration(vErr)*time.Millisecond, err.TTL())
 }

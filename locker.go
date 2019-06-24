@@ -138,7 +138,7 @@ type TTLError interface {
 	TTL() time.Duration // Returns TTL of a key.
 }
 
-var errTooManyRequests = errors.New("Too Many Requests")
+var errConflict = errors.New("Conflict")
 
 type ttlError struct {
 	ttl time.Duration
@@ -149,7 +149,7 @@ func newTTLError(ttl int64) *ttlError {
 }
 
 func (e *ttlError) Error() string {
-	return errTooManyRequests.Error()
+	return errConflict.Error()
 }
 
 func (e *ttlError) TTL() time.Duration {
