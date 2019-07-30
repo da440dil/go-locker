@@ -4,6 +4,7 @@ package locker
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	gw "github.com/da440dil/go-locker/redis"
@@ -12,16 +13,13 @@ import (
 
 // Gateway to storage to store a lock state.
 type Gateway interface {
-	// Inserts key value and ttl of key if key value not exists.
-	// Returns -1 on success, ttl in milliseconds on failure.
-	Insert(key, value string, ttl int64) (int64, error)
-	// Inserts key value and ttl of key if key value not exists.
-	// Updates ttl of key if key value equals input value.
-	// Returns -1 on success, ttl in milliseconds on failure.
-	Upsert(key, value string, ttl int64) (int64, error)
-	// Removes key if key value equals input value.
-	// Returns true on success, false on failure.
-	Remove(key, value string) (bool, error)
+	// Set sets key value and TTL of key if key not exists.
+	// Updates TTL of key if key exists and key value equals input value.
+	// Returns operation success flag, TTL of a key in milliseconds.
+	Set(key, value string, ttl int) (bool, int, error)
+	// Del deletes key if key value equals input value.
+	// Returns operation success flag.
+	Del(key, value string) (bool, error)
 }
 
 // Params defines parameters for creating new Locker.
@@ -29,7 +27,7 @@ type Params struct {
 	// TTL of a key. Must be greater than or equal to 1 millisecond.
 	TTL time.Duration
 	// Maximum number of retries if key is locked. Must be greater than or equal to 0. By default equals 0.
-	RetryCount int64
+	RetryCount int
 	// Delay between retries if key is locked. Must be greater than or equal to 1 millisecond. By default equals 0.
 	RetryDelay time.Duration
 	// Maximum time randomly added to delays between retries to improve performance under high contention.
@@ -59,99 +57,186 @@ func (p Params) validate() {
 	}
 }
 
-// WithGateway creates new Locker using custom Gateway.
-func WithGateway(gateway Gateway, params Params) *Locker {
-	params.validate()
-	return &Locker{
-		gateway:     gateway,
-		ttl:         durationToMilliseconds(params.TTL),
-		retryCount:  params.RetryCount,
-		retryDelay:  float64(params.RetryDelay),
-		retryJitter: float64(params.RetryJitter),
-		prefix:      params.Prefix,
-	}
-}
-
-// NewLocker creates new Locker using Redis Gateway.
-func NewLocker(client *redis.Client, params Params) *Locker {
-	return WithGateway(gw.NewGateway(client), params)
-}
-
-// Locker defines parameters for creating new Lock.
-type Locker struct {
-	gateway     Gateway
-	ttl         int64
-	retryCount  int64
+type params struct {
+	ttl         int
+	retryCount  int
 	retryDelay  float64
 	retryJitter float64
 	prefix      string
 }
 
+// WithGateway creates new Locker using custom Gateway.
+func WithGateway(gateway Gateway, p Params) *Locker {
+	p.validate()
+	return &Locker{
+		gateway: gateway,
+		params: params{
+			ttl:         durationToMilliseconds(p.TTL),
+			retryCount:  p.RetryCount,
+			retryDelay:  float64(durationToMilliseconds(p.RetryDelay)),
+			retryJitter: float64(durationToMilliseconds(p.RetryJitter)),
+			prefix:      p.Prefix,
+		},
+	}
+}
+
+// NewLocker creates new Locker using Redis Gateway.
+func NewLocker(client *redis.Client, p Params) *Locker {
+	return WithGateway(gw.NewGateway(client), p)
+}
+
+// Locker defines parameters for creating new Lock.
+type Locker struct {
+	gateway Gateway
+	params  params
+}
+
 var emptyCtx = context.Background()
 
 // NewLock creates new Lock.
-func (l *Locker) NewLock(key string) *Lock {
-	return l.WithContext(emptyCtx, key)
+func (lk *Locker) NewLock(key string) *Lock {
+	return lk.WithContext(emptyCtx, key)
 }
 
 // WithContext creates new Lock.
 // Context allows cancelling lock attempts prematurely.
-func (l *Locker) WithContext(ctx context.Context, key string) *Lock {
+func (lk *Locker) WithContext(ctx context.Context, key string) *Lock {
 	return &Lock{
-		locker: l,
-		ctx:    ctx,
-		key:    l.prefix + key,
+		gateway:     lk.gateway,
+		ttl:         lk.params.ttl,
+		retryCount:  lk.params.retryCount,
+		retryDelay:  lk.params.retryDelay,
+		retryJitter: lk.params.retryJitter,
+		key:         lk.params.prefix + key,
+		ctx:         ctx,
 	}
 }
 
 // Lock creates and applies new Lock. Returns TTLError if Lock failed to lock the key.
-func (l *Locker) Lock(key string) (*Lock, error) {
-	return l.LockWithContext(emptyCtx, key)
+func (lk *Locker) Lock(key string) (*Lock, error) {
+	return lk.LockWithContext(emptyCtx, key)
 }
 
 // LockWithContext creates and applies new Lock.
 // Context allows cancelling lock attempts prematurely.
 // Returns TTLError if Lock failed to lock the key.
-func (l *Locker) LockWithContext(ctx context.Context, key string) (*Lock, error) {
-	lock := l.WithContext(ctx, key)
-	ttl, err := lock.Lock()
+func (lk *Locker) LockWithContext(ctx context.Context, key string) (*Lock, error) {
+	lock := lk.WithContext(ctx, key)
+	ok, ttl, err := lock.Lock()
 	if err != nil {
 		return lock, err
 	}
-	if ttl != -1 {
+	if !ok {
 		return lock, newTTLError(ttl)
 	}
 	return lock, nil
 }
 
-func durationToMilliseconds(duration time.Duration) int64 {
-	return int64(duration / time.Millisecond)
+func durationToMilliseconds(duration time.Duration) int {
+	return int(duration / time.Millisecond)
 }
 
-func millisecondsToDuration(ttl int64) time.Duration {
+func millisecondsToDuration(ttl int) time.Duration {
 	return time.Duration(ttl) * time.Millisecond
 }
 
-// TTLError is the error returned when Lock failed to lock the key.
+// TTLError is the error returned when Counter failed to count.
 type TTLError interface {
 	Error() string
 	TTL() time.Duration // Returns TTL of a key.
 }
 
-var errConflict = errors.New("Conflict")
+var errTooManyRequests = errors.New("Too Many Requests")
 
 type ttlError struct {
 	ttl time.Duration
 }
 
-func newTTLError(ttl int64) *ttlError {
+func newTTLError(ttl int) *ttlError {
 	return &ttlError{millisecondsToDuration(ttl)}
 }
 
 func (e *ttlError) Error() string {
-	return errConflict.Error()
+	return errTooManyRequests.Error()
 }
 
 func (e *ttlError) TTL() time.Duration {
 	return e.ttl
+}
+
+// Lock implements distributed locking.
+type Lock struct {
+	gateway     Gateway
+	ttl         int
+	retryCount  int
+	retryDelay  float64
+	retryJitter float64
+	key         string
+	token       string
+	ctx         context.Context
+	mutex       sync.Mutex
+}
+
+// Lock applies the lock.
+// Returns operation success flag, TTL of a key in milliseconds.
+func (lk *Lock) Lock() (bool, int, error) {
+	lk.mutex.Lock()
+	defer lk.mutex.Unlock()
+
+	var token = lk.token
+	if token == "" {
+		var err error
+		token, err = newToken()
+		if err != nil {
+			return false, 0, err
+		}
+	}
+
+	var counter = lk.retryCount
+	var timer *time.Timer
+	for {
+		ok, ttl, err := lk.gateway.Set(lk.key, token, lk.ttl)
+		if err != nil {
+			return false, ttl, err
+		}
+
+		if ok {
+			lk.token = token
+			return ok, ttl, nil
+		}
+
+		if counter <= 0 {
+			return ok, ttl, nil
+		}
+
+		counter--
+		timeout := time.Duration(newDelay(lk.retryDelay, lk.retryJitter))
+		if timer == nil {
+			timer = time.NewTimer(timeout)
+			defer timer.Stop()
+		} else {
+			timer.Reset(timeout)
+		}
+
+		select {
+		case <-lk.ctx.Done():
+			return ok, ttl, nil
+		case <-timer.C:
+		}
+	}
+}
+
+// Unlock releases the lock.
+// Returns operation success flag.
+func (lk *Lock) Unlock() (bool, error) {
+	lk.mutex.Lock()
+	defer lk.mutex.Unlock()
+
+	if lk.token == "" {
+		return false, nil
+	}
+
+	token := lk.token
+	lk.token = ""
+	return lk.gateway.Del(lk.key, token)
 }

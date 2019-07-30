@@ -2,6 +2,7 @@ package locker
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -13,125 +14,119 @@ type gwMock struct {
 	mock.Mock
 }
 
-func (m *gwMock) Insert(key, value string, ttl int64) (int64, error) {
+func (m *gwMock) Set(key, value string, ttl int) (bool, int, error) {
 	args := m.Called(key, value, ttl)
-	return args.Get(0).(int64), args.Error(1)
+	return args.Bool(0), args.Int(1), args.Error(2)
 }
 
-func (m *gwMock) Upsert(key, value string, ttl int64) (int64, error) {
-	args := m.Called(key, value, ttl)
-	return args.Get(0).(int64), args.Error(1)
-}
-
-func (m *gwMock) Remove(key, value string) (bool, error) {
+func (m *gwMock) Del(key, value string) (bool, error) {
 	args := m.Called(key, value)
 	return args.Bool(0), args.Error(1)
 }
 
-func TestLocker(t *testing.T) {
-	const (
-		key     = "key"
-		ttlTime = time.Millisecond * 500
-		ttl     = int64(ttlTime / time.Millisecond)
-	)
+const Key = "key"
+const TTL = time.Millisecond * 100
+const RetryCount = 2
+const RetryDelay = time.Millisecond * 20
 
-	params := Params{TTL: ttlTime}
+func TestLocker(t *testing.T) {
+	ttl := durationToMilliseconds(TTL)
 
 	t.Run("error", func(t *testing.T) {
 		e := errors.New("any")
 		gw := &gwMock{}
-		gw.On("Insert", key, mock.AnythingOfType("string"), ttl).Return(int64(-1), e)
+		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(false, 42, e)
 
-		lkr := WithGateway(gw, params)
+		lr := WithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
 
-		_, err := lkr.Lock(key)
+		lk, err := lr.Lock(Key)
 		assert.Error(t, err)
 		assert.Equal(t, e, err)
+		assert.IsType(t, &Lock{}, lk)
+		gw.AssertExpectations(t)
 	})
 
 	t.Run("failure", func(t *testing.T) {
-		vErr := int64(42)
+		et := 42
 		gw := &gwMock{}
-		gw.On("Insert", key, mock.AnythingOfType("string"), ttl).Return(vErr, nil)
+		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(false, et, nil)
 
-		lkr := WithGateway(gw, params)
+		lr := WithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
 
-		_, err := lkr.Lock(key)
+		lk, err := lr.Lock(Key)
 		assert.Error(t, err)
-		assert.Exactly(t, newTTLError(vErr), err)
+		assert.Exactly(t, newTTLError(et), err)
+		assert.IsType(t, &Lock{}, lk)
 		gw.AssertExpectations(t)
 	})
 
 	t.Run("success", func(t *testing.T) {
 		gw := &gwMock{}
-		gw.On("Insert", key, mock.AnythingOfType("string"), ttl).Return(int64(-1), nil)
+		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(true, 42, nil)
 
-		lkr := WithGateway(gw, params)
+		lr := WithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
 
-		_, err := lkr.Lock(key)
+		lk, err := lr.Lock(Key)
 		assert.NoError(t, err)
+		assert.IsType(t, &Lock{}, lk)
 		gw.AssertExpectations(t)
 	})
 }
 
 func TestLock(t *testing.T) {
-	const (
-		key     = "key"
-		ttlTime = time.Millisecond * 500
-		ttl     = int64(ttlTime / time.Millisecond)
-	)
+	ttl := durationToMilliseconds(TTL)
 
-	t.Run("success", func(t *testing.T) {
+	t.Run("lock", func(t *testing.T) {
 		gw := &gwMock{}
-		lkr := WithGateway(gw, Params{TTL: ttlTime})
+		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(true, 42, nil)
 
-		vOK := int64(-1)
-		gw.On("Insert", key, mock.AnythingOfType("string"), ttl).Return(vOK, nil)
-		gw.On("Upsert", key, mock.AnythingOfType("string"), ttl).Return(vOK, nil)
-		gw.On("Remove", key, mock.AnythingOfType("string")).Return(true, nil)
+		lr := WithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
+		lk := lr.NewLock(Key)
 
-		lk := lkr.NewLock(key)
-
-		var v int64
-		var err error
-
-		v, err = lk.Lock()
-		assert.NoError(t, err)
-		assert.Equal(t, vOK, v)
-
-		v, err = lk.Lock()
-		assert.NoError(t, err)
-		assert.Equal(t, vOK, v)
-
-		var ok bool
-		ok, err = lk.Unlock()
-		assert.NoError(t, err)
-		assert.Equal(t, true, ok)
-
-		ok, err = lk.Unlock()
-		assert.NoError(t, err)
-		assert.Equal(t, false, ok)
-
+		ok1, tt1, err1 := lk.Lock()
+		ok2, tt2, err2 := lk.Lock()
+		assert.NoError(t, err1)
+		assert.NoError(t, err2)
+		assert.Equal(t, true, ok1)
+		assert.Equal(t, true, ok2)
+		assert.Equal(t, 42, tt1)
+		assert.Equal(t, 42, tt2)
 		gw.AssertExpectations(t)
+		gw.AssertNumberOfCalls(t, "Set", 2)
+	})
+
+	t.Run("unlock", func(t *testing.T) {
+		gw := &gwMock{}
+		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(true, 42, nil)
+		gw.On("Del", Key, mock.AnythingOfType("string")).Return(true, nil)
+
+		lr := WithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
+		lk := lr.NewLock(Key)
+		lk.Lock()
+
+		ok1, err1 := lk.Unlock()
+		ok2, err2 := lk.Unlock()
+		assert.NoError(t, err1)
+		assert.NoError(t, err2)
+		assert.Equal(t, true, ok1)
+		assert.Equal(t, false, ok2)
+		gw.AssertExpectations(t)
+		gw.AssertNumberOfCalls(t, "Del", 1)
 	})
 
 	t.Run("retry", func(t *testing.T) {
 		gw := &gwMock{}
-		n := int64(4)
-		lkr := WithGateway(gw, Params{TTL: ttlTime, RetryCount: n})
+		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(false, 42, nil)
 
-		vErr := int64(42)
+		lr := WithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
+		lk := lr.NewLock(Key)
 
-		gw.On("Insert", key, mock.AnythingOfType("string"), ttl).Return(vErr, nil)
-
-		lk := lkr.NewLock(key)
-
-		v, err := lk.Lock()
+		ok, tt, err := lk.Lock()
 		assert.NoError(t, err)
-		assert.Equal(t, vErr, v)
-
+		assert.Equal(t, false, ok)
+		assert.Equal(t, 42, tt)
 		gw.AssertExpectations(t)
-		gw.AssertNumberOfCalls(t, "Insert", int(n)+1)
+		gw.AssertNumberOfCalls(t, "Set", RetryCount+1)
 	})
 }
 
@@ -159,7 +154,7 @@ func TestParams(t *testing.T) {
 			assert.Equal(t, errInvalidRetryCount, err)
 		}()
 
-		Params{TTL: time.Millisecond, RetryCount: int64(-1)}.validate()
+		Params{TTL: time.Millisecond, RetryCount: -1}.validate()
 	})
 
 	t.Run("invalid retryDelay", func(t *testing.T) {
@@ -190,8 +185,36 @@ func TestParams(t *testing.T) {
 }
 
 func TestTTLError(t *testing.T) {
-	vErr := int64(42)
-	err := newTTLError(vErr)
-	assert.EqualError(t, err, errConflict.Error())
-	assert.Equal(t, time.Duration(vErr)*time.Millisecond, err.TTL())
+	et := 42
+	err := newTTLError(et)
+	assert.EqualError(t, err, errTooManyRequests.Error())
+	assert.Equal(t, millisecondsToDuration(et), err.TTL())
+}
+
+func TestNewDelay(t *testing.T) {
+	retryDelay := 42.0
+	retryJitter := 0.0
+	t.Run(fmt.Sprintf("retryDelay %v, retryJitter %v", retryDelay, retryJitter), func(t *testing.T) {
+		v := newDelay(retryDelay, retryJitter)
+		assert.Equal(t, retryDelay, v)
+	})
+
+	testCases := []struct {
+		retryDelay  float64
+		retryJitter float64
+	}{
+		{100, 20},
+		{200, 50},
+		{1000, 100},
+	}
+
+	for _, tc := range testCases {
+		retryDelay := tc.retryDelay
+		retryJitter := tc.retryJitter
+
+		t.Run(fmt.Sprintf("retryDelay %v, retryJitter %v", retryDelay, retryJitter), func(t *testing.T) {
+			v := newDelay(retryDelay, retryJitter)
+			assert.True(t, v >= (retryDelay-retryJitter) && v <= (retryDelay+retryJitter))
+		})
+	}
 }

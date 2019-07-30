@@ -13,28 +13,24 @@ var ErrInvalidResponse = errors.New("Invalid response")
 // ErrKeyNameClash is the error returned when Redis key exists and has no TTL.
 var ErrKeyNameClash = errors.New("Key name clash")
 
-var insert = redis.NewScript(
-	"if redis.call(\"set\", KEYS[1], ARGV[1], \"nx\", \"px\", ARGV[2]) == false then " +
-		"return redis.call(\"pttl\", KEYS[1]) " +
-		"end " +
-		"return nil",
-)
-var upsert = redis.NewScript(
-	"local v = redis.call(\"get\", KEYS[1])" +
-		"if v == ARGV[1] then " +
-		"redis.call(\"pexpire\", KEYS[1], ARGV[2]) " +
-		"return nil " +
-		"end " +
+var set = redis.NewScript(
+	"local v = redis.call(\"get\", KEYS[1]) " +
 		"if v == false then " +
 		"redis.call(\"set\", KEYS[1], ARGV[1], \"px\", ARGV[2]) " +
-		"return nil " +
+		"return -2 " +
+		"end " +
+		"if v == ARGV[1] then " +
+		"redis.call(\"pexpire\", KEYS[1], ARGV[2]) " +
+		"return -2 " +
 		"end " +
 		"return redis.call(\"pttl\", KEYS[1])",
 )
-var remove = redis.NewScript(
+
+var del = redis.NewScript(
 	"if redis.call(\"get\", KEYS[1]) == ARGV[1] then " +
 		"return redis.call(\"del\", KEYS[1]) " +
-		"end",
+		"end " +
+		"return 0",
 )
 
 // Gateway is a gateway to Redis storage.
@@ -47,53 +43,43 @@ func NewGateway(client *redis.Client) *Gateway {
 	return &Gateway{client}
 }
 
-func (gw *Gateway) Insert(key, value string, ttl int64) (int64, error) {
-	res, err := insert.Run(gw.client, []string{key}, value, ttl).Result()
+// Set sets key value and TTL of key if key not exists.
+// Updates TTL of key if key exists and key value equals input value.
+// Returns operation success flag, TTL of a key in milliseconds.
+func (gw *Gateway) Set(key, value string, ttl int) (bool, int, error) {
+	res, err := set.Run(gw.client, []string{key}, value, ttl).Result()
 	if err != nil {
-		if err == redis.Nil {
-			return -1, nil
-		}
-		return -2, err
+		return false, 0, err
 	}
-	i, ok := res.(int64)
+
+	t, ok := res.(int64)
 	if !ok {
-		return -2, ErrInvalidResponse
+		return false, 0, ErrInvalidResponse
 	}
-	if i == -1 {
-		return -2, ErrKeyNameClash
+
+	if t == -1 {
+		return false, 0, ErrKeyNameClash
 	}
-	return i, nil
+
+	if t == -2 {
+		return true, ttl, nil
+	}
+
+	return false, int(t), nil
 }
 
-func (gw *Gateway) Upsert(key, value string, ttl int64) (int64, error) {
-	res, err := upsert.Run(gw.client, []string{key}, value, ttl).Result()
+// Del deletes key if key value equals input value.
+// Returns operation success flag.
+func (gw *Gateway) Del(key, value string) (bool, error) {
+	res, err := del.Run(gw.client, []string{key}, value).Result()
 	if err != nil {
-		if err == redis.Nil {
-			return -1, nil
-		}
-		return -2, err
-	}
-	i, ok := res.(int64)
-	if !ok {
-		return -2, ErrInvalidResponse
-	}
-	if i == -1 {
-		return -2, ErrKeyNameClash
-	}
-	return i, nil
-}
-
-func (gw *Gateway) Remove(key, value string) (bool, error) {
-	res, err := remove.Run(gw.client, []string{key}, value).Result()
-	if err != nil {
-		if err == redis.Nil {
-			return false, nil
-		}
 		return false, err
 	}
-	i, ok := res.(int64)
+
+	v, ok := res.(int64)
 	if !ok {
 		return false, ErrInvalidResponse
 	}
-	return i == 1, nil
+
+	return v == 1, nil
 }
