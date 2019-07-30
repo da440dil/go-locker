@@ -140,7 +140,7 @@ func millisecondsToDuration(ttl int) time.Duration {
 	return time.Duration(ttl) * time.Millisecond
 }
 
-// TTLError is the error returned when Counter failed to count.
+// TTLError is the error returned when Lock failed to lock the key.
 type TTLError interface {
 	Error() string
 	TTL() time.Duration // Returns TTL of a key.
