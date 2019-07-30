@@ -1,5 +1,9 @@
 # go-locker
 
+[![GoDoc](https://godoc.org/github.com/da440dil/go-locker?status.svg)](https://godoc.org/github.com/da440dil/go-locker)
+[![Go Report Card](https://goreportcard.com/badge/github.com/da440dil/go-locker)](https://goreportcard.com/report/github.com/da440dil/go-locker)
+
+
 Distributed locking using [Redis](https://redis.io/).
 
 ## Example
@@ -20,17 +24,20 @@ func main() {
 	client := redis.NewClient(&redis.Options{})
 	defer client.Close()
 
-	lkr := locker.NewLocker(
+	lr := locker.NewLocker(
 		client,
 		locker.Params{TTL: time.Millisecond * 100},
 	)
-
+	key := "key"
 	var wg sync.WaitGroup
-	handle := func(lk *locker.Lock, err error) {
-		if err == nil {
-			fmt.Println("Locker has locked the key")
-			wg.Add(1)
-			go func() {
+	lockUnlock := func() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			lk, err := lr.Lock(key)
+			if err == nil {
+				fmt.Println("Locker has locked the key")
 				time.Sleep(time.Millisecond * 50)
 				ok, err := lk.Unlock()
 				if err != nil {
@@ -41,24 +48,19 @@ func main() {
 				} else {
 					fmt.Println("Locker has failed to unlock the key")
 				}
-				wg.Done()
-			}()
-		} else {
-			if e, ok := err.(locker.TTLError); ok {
-				fmt.Printf("Locker has failed to lock the key, retry after %v\n", e.TTL())
 			} else {
-				panic(err)
+				if e, ok := err.(locker.TTLError); ok {
+					fmt.Printf("Locker has failed to lock the key, retry after %v\n", e.TTL())
+				} else {
+					panic(err)
+				}
 			}
-		}
+		}()
 	}
 
-	key := "key"
-	handle(lkr.Lock(key))
-	handle(lkr.Lock(key))
-	wg.Wait()
-	// Output:
-	// Locker has locked the key
-	// Locker has failed to lock the key, retry after 100ms
+	lockUnlock() // Locker has locked the key
+	lockUnlock() // Locker has failed to lock the key, retry after 100ms
 	// Locker has unlocked the key
+	wg.Wait()
 }
 ```
