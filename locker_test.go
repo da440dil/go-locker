@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-redis/redis"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -24,10 +25,21 @@ func (m *gwMock) Del(key, value string) (bool, error) {
 	return args.Bool(0), args.Error(1)
 }
 
+const Addr = "127.0.0.1:6379"
+const DB = 10
+
 const Key = "key"
 const TTL = time.Millisecond * 100
 const RetryCount = 2
 const RetryDelay = time.Millisecond * 20
+
+func TestNewLocker(t *testing.T) {
+	client := redis.NewClient(&redis.Options{Addr: Addr, DB: DB})
+	defer client.Close()
+
+	lr := NewLocker(client, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
+	assert.IsType(t, &Locker{}, lr)
+}
 
 func TestLocker(t *testing.T) {
 	ttl := durationToMilliseconds(TTL)
