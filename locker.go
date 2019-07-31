@@ -96,11 +96,15 @@ type Locker struct {
 }
 
 // NewLocker creates new Locker using Redis Gateway.
+// TTL is TTL of a key, must be greater than or equal to 1 millisecond.
+// Options are functional options.
 func NewLocker(client *redis.Client, ttl time.Duration, options ...Func) (*Locker, error) {
 	return NewLockerWithGateway(gw.NewGateway(client), ttl, options...)
 }
 
 // NewLockerWithGateway creates new Locker using custom Gateway.
+// TTL is TTL of a key, must be greater than or equal to 1 millisecond.
+// Options are functional options.
 func NewLockerWithGateway(gateway Gateway, ttl time.Duration, options ...Func) (*Locker, error) {
 	if ttl < time.Millisecond {
 		return nil, ErrInvalidTTL
