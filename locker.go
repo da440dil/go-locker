@@ -173,7 +173,7 @@ type TTLError interface {
 	TTL() time.Duration // Returns TTL of a key.
 }
 
-const ttlErrorMsg = "Too Many Requests"
+const ttlErrorMsg = "Conflict"
 
 type ttlError struct {
 	ttl time.Duration
