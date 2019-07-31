@@ -95,12 +95,12 @@ var emptyCtx = context.Background()
 
 // NewLock creates new Lock.
 func (lk *Locker) NewLock(key string) *Lock {
-	return lk.WithContext(emptyCtx, key)
+	return lk.NewLockWithContext(emptyCtx, key)
 }
 
-// WithContext creates new Lock.
+// NewLockWithContext creates new Lock.
 // Context allows cancelling lock attempts prematurely.
-func (lk *Locker) WithContext(ctx context.Context, key string) *Lock {
+func (lk *Locker) NewLockWithContext(ctx context.Context, key string) *Lock {
 	return &Lock{
 		gateway:     lk.gateway,
 		ttl:         lk.params.ttl,
@@ -121,7 +121,7 @@ func (lk *Locker) Lock(key string) (*Lock, error) {
 // Context allows cancelling lock attempts prematurely.
 // Returns TTLError if Lock failed to lock the key.
 func (lk *Locker) LockWithContext(ctx context.Context, key string) (*Lock, error) {
-	lock := lk.WithContext(ctx, key)
+	lock := lk.NewLockWithContext(ctx, key)
 	ok, ttl, err := lock.Lock()
 	if err != nil {
 		return lock, err
