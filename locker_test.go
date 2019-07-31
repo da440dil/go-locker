@@ -49,7 +49,7 @@ func TestLocker(t *testing.T) {
 		gw := &gwMock{}
 		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(false, 42, e)
 
-		lr := WithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
+		lr := NewLockerWithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
 
 		lk, err := lr.Lock(Key)
 		assert.Error(t, err)
@@ -63,7 +63,7 @@ func TestLocker(t *testing.T) {
 		gw := &gwMock{}
 		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(false, et, nil)
 
-		lr := WithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
+		lr := NewLockerWithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
 
 		lk, err := lr.Lock(Key)
 		assert.Error(t, err)
@@ -76,7 +76,7 @@ func TestLocker(t *testing.T) {
 		gw := &gwMock{}
 		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(true, 42, nil)
 
-		lr := WithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
+		lr := NewLockerWithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
 
 		lk, err := lr.Lock(Key)
 		assert.NoError(t, err)
@@ -92,7 +92,7 @@ func TestLock(t *testing.T) {
 		gw := &gwMock{}
 		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(true, 42, nil)
 
-		lr := WithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
+		lr := NewLockerWithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
 		lk := lr.NewLock(Key)
 
 		ok1, tt1, err1 := lk.Lock()
@@ -112,7 +112,7 @@ func TestLock(t *testing.T) {
 		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(true, 42, nil)
 		gw.On("Del", Key, mock.AnythingOfType("string")).Return(true, nil)
 
-		lr := WithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
+		lr := NewLockerWithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
 		lk := lr.NewLock(Key)
 		lk.Lock()
 
@@ -130,7 +130,7 @@ func TestLock(t *testing.T) {
 		gw := &gwMock{}
 		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(false, 42, nil)
 
-		lr := WithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
+		lr := NewLockerWithGateway(gw, Params{TTL: TTL, RetryCount: RetryCount, RetryDelay: RetryDelay})
 		lk := lr.NewLock(Key)
 
 		ok, tt, err := lk.Lock()

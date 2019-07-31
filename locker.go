@@ -65,8 +65,8 @@ type params struct {
 	prefix      string
 }
 
-// WithGateway creates new Locker using custom Gateway.
-func WithGateway(gateway Gateway, p Params) *Locker {
+// NewLockerWithGateway creates new Locker using custom Gateway.
+func NewLockerWithGateway(gateway Gateway, p Params) *Locker {
 	p.validate()
 	return &Locker{
 		gateway: gateway,
@@ -82,7 +82,7 @@ func WithGateway(gateway Gateway, p Params) *Locker {
 
 // NewLocker creates new Locker using Redis Gateway.
 func NewLocker(client *redis.Client, p Params) *Locker {
-	return WithGateway(gw.NewGateway(client), p)
+	return NewLockerWithGateway(gw.NewGateway(client), p)
 }
 
 // Locker defines parameters for creating new Lock.
