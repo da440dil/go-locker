@@ -26,10 +26,10 @@ func main() {
 	client := redis.NewClient(&redis.Options{})
 	defer client.Close()
 
-	lr := locker.NewLocker(
-		client,
-		locker.Params{TTL: time.Millisecond * 100},
-	)
+	lr, err := locker.NewLocker(client, time.Millisecond*100)
+	if err != nil {
+		panic(err)
+	}
 	key := "key"
 	var wg sync.WaitGroup
 	lockUnlock := func() {

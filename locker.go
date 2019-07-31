@@ -22,42 +22,72 @@ type Gateway interface {
 	Del(key, value string) (bool, error)
 }
 
-// Params defines parameters for creating new Locker.
-type Params struct {
-	// TTL of a key. Must be greater than or equal to 1 millisecond.
-	TTL time.Duration
-	// Maximum number of retries if key is locked. Must be greater than or equal to 0. By default equals 0.
-	RetryCount int
-	// Delay between retries if key is locked. Must be greater than or equal to 1 millisecond. By default equals 0.
-	RetryDelay time.Duration
-	// Maximum time randomly added to delays between retries to improve performance under high contention.
-	// Must be greater than or equal to 1 millisecond. By default equals 0.
-	RetryJitter time.Duration
-	// Prefix of a key. Optional.
-	Prefix string
-}
+// ErrInvalidTTL is the error returned when NewLocker receives invalid value of TTL.
+var ErrInvalidTTL = errors.New("TTL must be greater than or equal to 1 millisecond")
 
-var errInvalidTTL = errors.New("TTL must be greater than or equal to 1 millisecond")
-var errInvalidRetryCount = errors.New("RetryCount must be greater than or equal to zero")
-var errInvalidRetryDelay = errors.New("RetryDelay must be greater than or equal to 1 millisecond")
-var errInvalidRetryJitter = errors.New("RetryJitter must be greater than or equal to 1 millisecond")
+// ErrInvalidRetryCount is the error returned when WithRetryCount receives invalid value.
+var ErrInvalidRetryCount = errors.New("RetryCount must be greater than or equal to zero")
 
-func (p Params) validate() {
-	if p.TTL < time.Millisecond {
-		panic(errInvalidTTL)
-	}
-	if p.RetryCount < 0 {
-		panic(errInvalidRetryCount)
-	}
-	if p.RetryDelay != 0 && p.RetryDelay < time.Millisecond {
-		panic(errInvalidRetryDelay)
-	}
-	if p.RetryJitter != 0 && p.RetryJitter < time.Millisecond {
-		panic(errInvalidRetryJitter)
+// ErrInvalidRetryDelay is the error returned when WithRetryDelay receives invalid value.
+var ErrInvalidRetryDelay = errors.New("RetryDelay must be greater than or equal to 1 millisecond")
+
+// ErrInvalidRetryJitter is the error returned when WithRetryJitter receives invalid value.
+var ErrInvalidRetryJitter = errors.New("RetryJitter must be greater than or equal to 1 millisecond")
+
+// Func is function returned by functions for setting options.
+type Func func(lk *Locker) error
+
+// WithRetryCount sets maximum number of retries if key is locked.
+// Must be greater than or equal to 0.
+// By default equals 0.
+func WithRetryCount(v int) Func {
+	return func(lr *Locker) error {
+		if v < 0 {
+			return ErrInvalidRetryCount
+		}
+		lr.retryCount = v
+		return nil
 	}
 }
 
-type params struct {
+// WithRetryDelay sets delay between retries if key is locked.
+// Must be greater than or equal to 1 millisecond.
+// By default equals 0.
+func WithRetryDelay(v time.Duration) Func {
+	return func(lr *Locker) error {
+		if v < time.Millisecond {
+			return ErrInvalidRetryDelay
+		}
+		lr.retryDelay = float64(durationToMilliseconds(v))
+		return nil
+	}
+}
+
+// WithRetryJitter sets maximum time randomly added to delays between retries
+// to improve performance under high contention.
+// Must be greater than or equal to 1 millisecond.
+// By default equals 0.
+func WithRetryJitter(v time.Duration) Func {
+	return func(lr *Locker) error {
+		if v < time.Millisecond {
+			return ErrInvalidRetryJitter
+		}
+		lr.retryJitter = float64(durationToMilliseconds(v))
+		return nil
+	}
+}
+
+// WithPrefix sets prefix of a key.
+func WithPrefix(v string) Func {
+	return func(lr *Locker) error {
+		lr.prefix = v
+		return nil
+	}
+}
+
+// Locker defines parameters for creating new Lock.
+type Locker struct {
+	gateway     Gateway
 	ttl         int
 	retryCount  int
 	retryDelay  float64
@@ -65,30 +95,27 @@ type params struct {
 	prefix      string
 }
 
-// NewLockerWithGateway creates new Locker using custom Gateway.
-func NewLockerWithGateway(gateway Gateway, p Params) *Locker {
-	p.validate()
-	return &Locker{
-		gateway: gateway,
-		params: params{
-			ttl:         durationToMilliseconds(p.TTL),
-			retryCount:  p.RetryCount,
-			retryDelay:  float64(durationToMilliseconds(p.RetryDelay)),
-			retryJitter: float64(durationToMilliseconds(p.RetryJitter)),
-			prefix:      p.Prefix,
-		},
-	}
-}
-
 // NewLocker creates new Locker using Redis Gateway.
-func NewLocker(client *redis.Client, p Params) *Locker {
-	return NewLockerWithGateway(gw.NewGateway(client), p)
+func NewLocker(client *redis.Client, ttl time.Duration, options ...Func) (*Locker, error) {
+	return NewLockerWithGateway(gw.NewGateway(client), ttl, options...)
 }
 
-// Locker defines parameters for creating new Lock.
-type Locker struct {
-	gateway Gateway
-	params  params
+// NewLockerWithGateway creates new Locker using custom Gateway.
+func NewLockerWithGateway(gateway Gateway, ttl time.Duration, options ...Func) (*Locker, error) {
+	if ttl < time.Millisecond {
+		return nil, ErrInvalidTTL
+	}
+	lr := &Locker{
+		gateway: gateway,
+		ttl:     durationToMilliseconds(ttl),
+	}
+	for _, fn := range options {
+		err := fn(lr)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return lr, nil
 }
 
 var emptyCtx = context.Background()
@@ -103,11 +130,11 @@ func (lk *Locker) NewLock(key string) *Lock {
 func (lk *Locker) NewLockWithContext(ctx context.Context, key string) *Lock {
 	return &Lock{
 		gateway:     lk.gateway,
-		ttl:         lk.params.ttl,
-		retryCount:  lk.params.retryCount,
-		retryDelay:  lk.params.retryDelay,
-		retryJitter: lk.params.retryJitter,
-		key:         lk.params.prefix + key,
+		ttl:         lk.ttl,
+		retryCount:  lk.retryCount,
+		retryDelay:  lk.retryDelay,
+		retryJitter: lk.retryJitter,
+		key:         lk.prefix + key,
 		ctx:         ctx,
 	}
 }
@@ -146,7 +173,7 @@ type TTLError interface {
 	TTL() time.Duration // Returns TTL of a key.
 }
 
-var errTooManyRequests = errors.New("Too Many Requests")
+const ttlErrorMsg = "Too Many Requests"
 
 type ttlError struct {
 	ttl time.Duration
@@ -157,7 +184,7 @@ func newTTLError(ttl int) *ttlError {
 }
 
 func (e *ttlError) Error() string {
-	return errTooManyRequests.Error()
+	return ttlErrorMsg
 }
 
 func (e *ttlError) TTL() time.Duration {
@@ -202,15 +229,16 @@ func (lk *Lock) Lock() (bool, int, error) {
 
 		if ok {
 			lk.token = token
-			return ok, ttl, nil
+			return true, ttl, nil
 		}
 
 		if counter <= 0 {
-			return ok, ttl, nil
+			lk.token = ""
+			return false, ttl, nil
 		}
 
 		counter--
-		timeout := time.Duration(newDelay(lk.retryDelay, lk.retryJitter))
+		timeout := time.Duration(newDelay(lk.retryDelay, lk.retryJitter)) * time.Millisecond
 		if timer == nil {
 			timer = time.NewTimer(timeout)
 			defer timer.Stop()
@@ -220,7 +248,7 @@ func (lk *Lock) Lock() (bool, int, error) {
 
 		select {
 		case <-lk.ctx.Done():
-			return ok, ttl, nil
+			return false, ttl, nil
 		case <-timer.C:
 		}
 	}
