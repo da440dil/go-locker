@@ -34,6 +34,9 @@ var ErrInvalidRetryDelay = errors.New("RetryDelay must be greater than or equal 
 // ErrInvalidRetryJitter is the error returned when WithRetryJitter receives invalid value.
 var ErrInvalidRetryJitter = errors.New("RetryJitter must be greater than or equal to 1 millisecond")
 
+// ErrInvaldKey is the error returned when key length is greater than 512 MB.
+var ErrInvaldKey = errors.New("Key length must be less than or equal to 512 MB")
+
 // Func is function returned by functions for setting options.
 type Func func(lk *Locker) error
 
@@ -80,6 +83,9 @@ func WithRetryJitter(v time.Duration) Func {
 // WithPrefix sets prefix of a key.
 func WithPrefix(v string) Func {
 	return func(lr *Locker) error {
+		if !isValidKey(v) {
+			return ErrInvaldKey
+		}
 		lr.prefix = v
 		return nil
 	}
@@ -125,22 +131,26 @@ func NewLockerWithGateway(gateway Gateway, ttl time.Duration, options ...Func) (
 var emptyCtx = context.Background()
 
 // NewLock creates new Lock.
-func (lk *Locker) NewLock(key string) *Lock {
+func (lk *Locker) NewLock(key string) (*Lock, error) {
 	return lk.NewLockWithContext(emptyCtx, key)
 }
 
 // NewLockWithContext creates new Lock.
 // Context allows cancelling lock attempts prematurely.
-func (lk *Locker) NewLockWithContext(ctx context.Context, key string) *Lock {
+func (lk *Locker) NewLockWithContext(ctx context.Context, key string) (*Lock, error) {
+	key = lk.prefix + key
+	if !isValidKey(key) {
+		return nil, ErrInvaldKey
+	}
 	return &Lock{
 		gateway:     lk.gateway,
 		ttl:         lk.ttl,
 		retryCount:  lk.retryCount,
 		retryDelay:  lk.retryDelay,
 		retryJitter: lk.retryJitter,
-		key:         lk.prefix + key,
+		key:         key,
 		ctx:         ctx,
-	}
+	}, nil
 }
 
 // Lock creates and applies new Lock. Returns TTLError if Lock failed to lock the key.
@@ -152,7 +162,10 @@ func (lk *Locker) Lock(key string) (*Lock, error) {
 // Context allows cancelling lock attempts prematurely.
 // Returns TTLError if Lock failed to lock the key.
 func (lk *Locker) LockWithContext(ctx context.Context, key string) (*Lock, error) {
-	lock := lk.NewLockWithContext(ctx, key)
+	lock, err := lk.NewLockWithContext(ctx, key)
+	if err != nil {
+		return nil, err
+	}
 	ok, ttl, err := lock.Lock()
 	if err != nil {
 		return lock, err
@@ -193,6 +206,12 @@ func (e *ttlError) Error() string {
 
 func (e *ttlError) TTL() time.Duration {
 	return e.ttl
+}
+
+const maxKeyLen = 512000000
+
+func isValidKey(key string) bool {
+	return len([]byte(key)) <= maxKeyLen
 }
 
 // Lock implements distributed locking.

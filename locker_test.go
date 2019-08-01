@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/go-redis/redis"
 	"github.com/stretchr/testify/assert"
@@ -86,6 +87,14 @@ func TestOptions(t *testing.T) {
 		assert.Equal(t, ErrInvalidRetryJitter, err)
 	})
 
+	t.Run("ErrInvaldKey", func(t *testing.T) {
+		p := make([]byte, 512000001)
+		s := *(*string)(unsafe.Pointer(&p))
+		_, err := NewLockerWithGateway(gw, TTL, WithPrefix(s))
+		assert.Error(t, err)
+		assert.Equal(t, ErrInvaldKey, err)
+	})
+
 	t.Run("success", func(t *testing.T) {
 		gw := &gwMock{}
 		lr, err := NewLockerWithGateway(
@@ -103,6 +112,20 @@ func TestOptions(t *testing.T) {
 
 func TestLocker(t *testing.T) {
 	ttl := durationToMilliseconds(TTL)
+
+	t.Run("ErrInvaldKey", func(t *testing.T) {
+		gw := &gwMock{}
+
+		lr, err := NewLockerWithGateway(gw, TTL)
+		assert.NoError(t, err)
+
+		p := make([]byte, 512000001)
+		s := *(*string)(unsafe.Pointer(&p))
+		v, err := lr.Lock(s)
+		assert.Nil(t, v)
+		assert.Error(t, err)
+		assert.Equal(t, ErrInvaldKey, err)
+	})
 
 	t.Run("error", func(t *testing.T) {
 		e := errors.New("any")
@@ -157,7 +180,8 @@ func TestLock(t *testing.T) {
 
 		lr, err := NewLockerWithGateway(gw, TTL)
 		assert.NoError(t, err)
-		lk := lr.NewLock(Key)
+		lk, err := lr.NewLock(Key)
+		assert.NoError(t, err)
 
 		ok1, tt1, err1 := lk.Lock()
 		ok2, tt2, err2 := lk.Lock()
@@ -178,7 +202,8 @@ func TestLock(t *testing.T) {
 
 		lr, err := NewLockerWithGateway(gw, TTL)
 		assert.NoError(t, err)
-		lk := lr.NewLock(Key)
+		lk, err := lr.NewLock(Key)
+		assert.NoError(t, err)
 		lk.Lock()
 
 		ok1, err1 := lk.Unlock()
@@ -198,7 +223,8 @@ func TestLock(t *testing.T) {
 
 		lr, err := NewLockerWithGateway(gw, TTL, WithRetryCount(retryCount))
 		assert.NoError(t, err)
-		lk := lr.NewLock(Key)
+		lk, err := lr.NewLock(Key)
+		assert.NoError(t, err)
 
 		ok, tt, err := lk.Lock()
 		assert.NoError(t, err)
@@ -221,7 +247,8 @@ func TestLockWithContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
 	defer cancel()
 
-	lk := lr.NewLockWithContext(ctx, Key)
+	lk, err := lr.NewLockWithContext(ctx, Key)
+	assert.NoError(t, err)
 
 	ok, tt, err := lk.Lock()
 	assert.NoError(t, err)
