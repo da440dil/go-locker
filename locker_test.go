@@ -33,6 +33,9 @@ const DB = 10
 const Key = "key"
 const TTL = time.Millisecond * 100
 
+var p = make([]byte, MaxKeySize+1)
+var invalidKey = *(*string)(unsafe.Pointer(&p))
+
 func TestNewLocker(t *testing.T) {
 	client := redis.NewClient(&redis.Options{Addr: Addr, DB: DB})
 	defer client.Close()
@@ -88,11 +91,9 @@ func TestOptions(t *testing.T) {
 	})
 
 	t.Run("ErrInvaldKey", func(t *testing.T) {
-		p := make([]byte, 512000001)
-		s := *(*string)(unsafe.Pointer(&p))
-		_, err := NewLockerWithGateway(gw, TTL, WithPrefix(s))
+		_, err := NewLockerWithGateway(gw, TTL, WithPrefix(invalidKey))
 		assert.Error(t, err)
-		assert.Equal(t, ErrInvaldKey, err)
+		assert.Equal(t, ErrInvalidKey, err)
 	})
 
 	t.Run("success", func(t *testing.T) {
@@ -119,12 +120,10 @@ func TestLocker(t *testing.T) {
 		lr, err := NewLockerWithGateway(gw, TTL)
 		assert.NoError(t, err)
 
-		p := make([]byte, 512000001)
-		s := *(*string)(unsafe.Pointer(&p))
-		v, err := lr.Lock(s)
+		v, err := lr.Lock(invalidKey)
 		assert.Nil(t, v)
 		assert.Error(t, err)
-		assert.Equal(t, ErrInvaldKey, err)
+		assert.Equal(t, ErrInvalidKey, err)
 	})
 
 	t.Run("error", func(t *testing.T) {

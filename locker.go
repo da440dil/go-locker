@@ -34,8 +34,8 @@ var ErrInvalidRetryDelay = errors.New("RetryDelay must be greater than or equal 
 // ErrInvalidRetryJitter is the error returned when WithRetryJitter receives invalid value.
 var ErrInvalidRetryJitter = errors.New("RetryJitter must be greater than or equal to 1 millisecond")
 
-// ErrInvaldKey is the error returned when key length is greater than 512 MB.
-var ErrInvaldKey = errors.New("Key length must be less than or equal to 512 MB")
+// ErrInvalidKey is the error returned when key size is greater than 512 MB.
+var ErrInvalidKey = errors.New("Key size must be less than or equal to 512 MB")
 
 // Func is function returned by functions for setting options.
 type Func func(lk *Locker) error
@@ -84,7 +84,7 @@ func WithRetryJitter(v time.Duration) Func {
 func WithPrefix(v string) Func {
 	return func(lr *Locker) error {
 		if !isValidKey(v) {
-			return ErrInvaldKey
+			return ErrInvalidKey
 		}
 		lr.prefix = v
 		return nil
@@ -140,7 +140,7 @@ func (lk *Locker) NewLock(key string) (*Lock, error) {
 func (lk *Locker) NewLockWithContext(ctx context.Context, key string) (*Lock, error) {
 	key = lk.prefix + key
 	if !isValidKey(key) {
-		return nil, ErrInvaldKey
+		return nil, ErrInvalidKey
 	}
 	return &Lock{
 		gateway:     lk.gateway,
@@ -208,10 +208,11 @@ func (e *ttlError) TTL() time.Duration {
 	return e.ttl
 }
 
-const maxKeyLen = 512000000
+// MaxKeySize is maximum key size in bytes.
+const MaxKeySize = 512000000
 
 func isValidKey(key string) bool {
-	return len([]byte(key)) <= maxKeyLen
+	return len([]byte(key)) <= MaxKeySize
 }
 
 // Lock implements distributed locking.
