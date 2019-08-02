@@ -265,28 +265,32 @@ func TestTTLError(t *testing.T) {
 }
 
 func TestNewDelay(t *testing.T) {
-	retryDelay := 42.0
-	retryJitter := 0.0
-	t.Run(fmt.Sprintf("retryDelay %v, retryJitter %v", retryDelay, retryJitter), func(t *testing.T) {
+	retryDelay := 42
+	retryJitter := 0
+	t.Run(fmt.Sprintf("retryDelay %v retryJitter %v", retryDelay, retryJitter), func(t *testing.T) {
 		v := newDelay(retryDelay, retryJitter)
 		assert.Equal(t, retryDelay, v)
 	})
 
 	testCases := []struct {
-		retryDelay  float64
-		retryJitter float64
+		retryDelay  int
+		retryJitter int
 	}{
 		{100, 20},
 		{200, 50},
 		{1000, 100},
+		{100, 1000},
 	}
 
 	for _, tc := range testCases {
 		retryDelay := tc.retryDelay
 		retryJitter := tc.retryJitter
 
-		t.Run(fmt.Sprintf("retryDelay %v, retryJitter %v", retryDelay, retryJitter), func(t *testing.T) {
+		t.Run(fmt.Sprintf("retryDelay %v retryJitter %v", retryDelay, retryJitter), func(t *testing.T) {
 			v := newDelay(retryDelay, retryJitter)
+			if retryDelay < retryJitter {
+				retryDelay, retryJitter = retryJitter, retryDelay
+			}
 			assert.True(t, v >= (retryDelay-retryJitter) && v <= (retryDelay+retryJitter))
 		})
 	}

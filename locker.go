@@ -61,7 +61,7 @@ func WithRetryDelay(v time.Duration) Func {
 		if v < time.Millisecond {
 			return ErrInvalidRetryDelay
 		}
-		lr.retryDelay = float64(durationToMilliseconds(v))
+		lr.retryDelay = durationToMilliseconds(v)
 		return nil
 	}
 }
@@ -75,7 +75,7 @@ func WithRetryJitter(v time.Duration) Func {
 		if v < time.Millisecond {
 			return ErrInvalidRetryJitter
 		}
-		lr.retryJitter = float64(durationToMilliseconds(v))
+		lr.retryJitter = durationToMilliseconds(v)
 		return nil
 	}
 }
@@ -96,8 +96,8 @@ type Locker struct {
 	gateway     Gateway
 	ttl         int
 	retryCount  int
-	retryDelay  float64
-	retryJitter float64
+	retryDelay  int
+	retryJitter int
 	prefix      string
 }
 
@@ -220,8 +220,8 @@ type Lock struct {
 	gateway     Gateway
 	ttl         int
 	retryCount  int
-	retryDelay  float64
-	retryJitter float64
+	retryDelay  int
+	retryJitter int
 	key         string
 	token       string
 	ctx         context.Context
