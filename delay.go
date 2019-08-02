@@ -5,7 +5,11 @@ import (
 	"time"
 )
 
-var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
+var rnd *rand.Rand
+
+func init() {
+	rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
+}
 
 func newDelay(retryDelay int, retryJitter int) int {
 	if retryJitter == 0 {
