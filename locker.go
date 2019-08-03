@@ -37,13 +37,13 @@ var ErrInvalidRetryJitter = errors.New("RetryJitter must be greater than or equa
 // ErrInvalidKey is the error returned when key size is greater than 512 MB.
 var ErrInvalidKey = errors.New("Key size must be less than or equal to 512 MB")
 
-// Func is function returned by functions for setting options.
-type Func func(lk *Locker) error
+// Option is function returned by functions for setting options.
+type Option func(lk *Locker) error
 
 // WithRetryCount sets maximum number of retries if key is locked.
 // Must be greater than or equal to 0.
 // By default equals 0.
-func WithRetryCount(v int) Func {
+func WithRetryCount(v int) Option {
 	return func(lr *Locker) error {
 		if v < 0 {
 			return ErrInvalidRetryCount
@@ -56,7 +56,7 @@ func WithRetryCount(v int) Func {
 // WithRetryDelay sets delay between retries if key is locked.
 // Must be greater than or equal to 1 millisecond.
 // By default equals 0.
-func WithRetryDelay(v time.Duration) Func {
+func WithRetryDelay(v time.Duration) Option {
 	return func(lr *Locker) error {
 		if v < time.Millisecond {
 			return ErrInvalidRetryDelay
@@ -70,7 +70,7 @@ func WithRetryDelay(v time.Duration) Func {
 // to improve performance under high contention.
 // Must be greater than or equal to 1 millisecond.
 // By default equals 0.
-func WithRetryJitter(v time.Duration) Func {
+func WithRetryJitter(v time.Duration) Option {
 	return func(lr *Locker) error {
 		if v < time.Millisecond {
 			return ErrInvalidRetryJitter
@@ -81,7 +81,7 @@ func WithRetryJitter(v time.Duration) Func {
 }
 
 // WithPrefix sets prefix of a key.
-func WithPrefix(v string) Func {
+func WithPrefix(v string) Option {
 	return func(lr *Locker) error {
 		if !isValidKey(v) {
 			return ErrInvalidKey
@@ -104,14 +104,14 @@ type Locker struct {
 // NewLocker creates new Locker using Redis Gateway.
 // TTL is TTL of a key, must be greater than or equal to 1 millisecond.
 // Options are functional options.
-func NewLocker(client *redis.Client, ttl time.Duration, options ...Func) (*Locker, error) {
+func NewLocker(client *redis.Client, ttl time.Duration, options ...Option) (*Locker, error) {
 	return NewLockerWithGateway(gw.NewGateway(client), ttl, options...)
 }
 
 // NewLockerWithGateway creates new Locker using custom Gateway.
 // TTL is TTL of a key, must be greater than or equal to 1 millisecond.
 // Options are functional options.
-func NewLockerWithGateway(gateway Gateway, ttl time.Duration, options ...Func) (*Locker, error) {
+func NewLockerWithGateway(gateway Gateway, ttl time.Duration, options ...Option) (*Locker, error) {
 	if ttl < time.Millisecond {
 		return nil, ErrInvalidTTL
 	}
