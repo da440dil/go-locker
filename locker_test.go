@@ -228,7 +228,7 @@ func TestLockWithContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
 	defer cancel()
 
-	lk, err := lr.NewLockWithContext(ctx, Key)
+	lk, err := lr.NewLock(Key, WithContext(ctx))
 	assert.NoError(t, err)
 
 	ok, tt, err := lk.Lock()

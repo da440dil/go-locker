@@ -35,7 +35,7 @@ var ErrInvalidRetryJitter = errors.New("RetryJitter must be greater than or equa
 // ErrInvalidKey is the error returned when key size is greater than 512 MB.
 var ErrInvalidKey = errors.New("Key size must be less than or equal to 512 MB")
 
-// Option is function returned by functions for setting options.
+// Option is function returned by functions for setting Locker options.
 type Option func(lk *Locker) error
 
 // WithRetryCount sets maximum number of retries if key is locked.
@@ -120,41 +120,44 @@ func NewLocker(gateway Gateway, ttl time.Duration, options ...Option) (*Locker, 
 	return lr, nil
 }
 
-var emptyCtx = context.Background()
+// Opt is function returned by functions for setting Lock options.
+type Opt func(lk *Lock)
 
-// NewLock creates new Lock.
-func (lk *Locker) NewLock(key string) (*Lock, error) {
-	return lk.NewLockWithContext(emptyCtx, key)
+// WithContext sets lock context.
+// Context allows cancelling lock attempts prematurely.
+func WithContext(ctx context.Context) func(lk *Lock) {
+	return func(lk *Lock) {
+		lk.ctx = ctx
+	}
 }
 
-// NewLockWithContext creates new Lock.
-// Context allows cancelling lock attempts prematurely.
-func (lk *Locker) NewLockWithContext(ctx context.Context, key string) (*Lock, error) {
-	key = lk.prefix + key
+// NewLock creates new Lock.
+func (lr *Locker) NewLock(key string, opts ...Opt) (*Lock, error) {
+	key = lr.prefix + key
 	if !isValidKey(key) {
 		return nil, ErrInvalidKey
 	}
-	return &Lock{
-		gateway:     lk.gateway,
-		ttl:         lk.ttl,
-		retryCount:  lk.retryCount,
-		retryDelay:  lk.retryDelay,
-		retryJitter: lk.retryJitter,
+	lk := &Lock{
+		gateway:     lr.gateway,
+		ttl:         lr.ttl,
+		retryCount:  lr.retryCount,
+		retryDelay:  lr.retryDelay,
+		retryJitter: lr.retryJitter,
 		key:         key,
-		ctx:         ctx,
-	}, nil
+	}
+	for _, fn := range opts {
+		fn(lk)
+	}
+	if lk.ctx == nil {
+		lk.ctx = context.Background()
+	}
+	return lk, nil
 }
 
-// Lock creates and applies new Lock. Returns TTLError if Lock failed to lock the key.
-func (lk *Locker) Lock(key string) (*Lock, error) {
-	return lk.LockWithContext(emptyCtx, key)
-}
-
-// LockWithContext creates and applies new Lock.
-// Context allows cancelling lock attempts prematurely.
+// Lock creates and applies new Lock.
 // Returns TTLError if Lock failed to lock the key.
-func (lk *Locker) LockWithContext(ctx context.Context, key string) (*Lock, error) {
-	lock, err := lk.NewLockWithContext(ctx, key)
+func (lr *Locker) Lock(key string, opts ...Opt) (*Lock, error) {
+	lock, err := lr.NewLock(key, opts...)
 	if err != nil {
 		return nil, err
 	}
