@@ -6,7 +6,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/da440dil/go-locker)](https://goreportcard.com/report/github.com/da440dil/go-locker)
 
 
-Distributed locking using [Redis](https://redis.io/).
+Distributed locking with pluggable storage to store a lock state.
 
 ## Example
 
@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/da440dil/go-locker"
+	gw "github.com/da440dil/go-locker/redis"
 	"github.com/go-redis/redis"
 )
 
@@ -26,7 +27,7 @@ func main() {
 	client := redis.NewClient(&redis.Options{})
 	defer client.Close()
 
-	lr, err := locker.NewLocker(client, time.Millisecond*100)
+	lr, err := locker.NewLocker(gw.NewGateway(client), time.Millisecond*100)
 	if err != nil {
 		panic(err)
 	}

@@ -8,7 +8,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/go-redis/redis"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -37,33 +36,16 @@ var p = make([]byte, MaxKeySize+1)
 var invalidKey = *(*string)(unsafe.Pointer(&p))
 
 func TestNewLocker(t *testing.T) {
-	client := redis.NewClient(&redis.Options{Addr: Addr, DB: DB})
-	defer client.Close()
-
-	t.Run("ErrInvalidTTL", func(t *testing.T) {
-		_, err := NewLocker(client, time.Microsecond)
-		assert.Error(t, err)
-		assert.Equal(t, ErrInvalidTTL, err)
-	})
-
-	t.Run("success", func(t *testing.T) {
-		lr, err := NewLocker(client, TTL)
-		assert.NoError(t, err)
-		assert.IsType(t, &Locker{}, lr)
-	})
-}
-
-func TestNewLockerWithGateway(t *testing.T) {
 	gw := &gwMock{}
 
 	t.Run("ErrInvalidTTL", func(t *testing.T) {
-		_, err := NewLockerWithGateway(gw, time.Microsecond)
+		_, err := NewLocker(gw, time.Microsecond)
 		assert.Error(t, err)
 		assert.Equal(t, ErrInvalidTTL, err)
 	})
 
 	t.Run("success", func(t *testing.T) {
-		lr, err := NewLockerWithGateway(gw, TTL)
+		lr, err := NewLocker(gw, TTL)
 		assert.NoError(t, err)
 		assert.IsType(t, &Locker{}, lr)
 	})
@@ -73,32 +55,32 @@ func TestOptions(t *testing.T) {
 	gw := &gwMock{}
 
 	t.Run("ErrInvalidRetryCount", func(t *testing.T) {
-		_, err := NewLockerWithGateway(gw, TTL, WithRetryCount(-1))
+		_, err := NewLocker(gw, TTL, WithRetryCount(-1))
 		assert.Error(t, err)
 		assert.Equal(t, ErrInvalidRetryCount, err)
 	})
 
 	t.Run("ErrInvalidRetryDelay", func(t *testing.T) {
-		_, err := NewLockerWithGateway(gw, TTL, WithRetryDelay(time.Microsecond))
+		_, err := NewLocker(gw, TTL, WithRetryDelay(time.Microsecond))
 		assert.Error(t, err)
 		assert.Equal(t, ErrInvalidRetryDelay, err)
 	})
 
 	t.Run("ErrInvalidRetryJitter", func(t *testing.T) {
-		_, err := NewLockerWithGateway(gw, TTL, WithRetryJitter(time.Microsecond))
+		_, err := NewLocker(gw, TTL, WithRetryJitter(time.Microsecond))
 		assert.Error(t, err)
 		assert.Equal(t, ErrInvalidRetryJitter, err)
 	})
 
 	t.Run("ErrInvaldKey", func(t *testing.T) {
-		_, err := NewLockerWithGateway(gw, TTL, WithPrefix(invalidKey))
+		_, err := NewLocker(gw, TTL, WithPrefix(invalidKey))
 		assert.Error(t, err)
 		assert.Equal(t, ErrInvalidKey, err)
 	})
 
 	t.Run("success", func(t *testing.T) {
 		gw := &gwMock{}
-		lr, err := NewLockerWithGateway(
+		lr, err := NewLocker(
 			gw,
 			TTL,
 			WithRetryCount(1),
@@ -117,7 +99,7 @@ func TestLocker(t *testing.T) {
 	t.Run("ErrInvaldKey", func(t *testing.T) {
 		gw := &gwMock{}
 
-		lr, err := NewLockerWithGateway(gw, TTL)
+		lr, err := NewLocker(gw, TTL)
 		assert.NoError(t, err)
 
 		v, err := lr.Lock(invalidKey)
@@ -131,7 +113,7 @@ func TestLocker(t *testing.T) {
 		gw := &gwMock{}
 		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(false, 42, e)
 
-		lr, err := NewLockerWithGateway(gw, TTL)
+		lr, err := NewLocker(gw, TTL)
 		assert.NoError(t, err)
 
 		lk, err := lr.Lock(Key)
@@ -146,7 +128,7 @@ func TestLocker(t *testing.T) {
 		gw := &gwMock{}
 		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(false, et, nil)
 
-		lr, err := NewLockerWithGateway(gw, TTL)
+		lr, err := NewLocker(gw, TTL)
 		assert.NoError(t, err)
 
 		lk, err := lr.Lock(Key)
@@ -160,7 +142,7 @@ func TestLocker(t *testing.T) {
 		gw := &gwMock{}
 		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(true, 42, nil)
 
-		lr, err := NewLockerWithGateway(gw, TTL)
+		lr, err := NewLocker(gw, TTL)
 		assert.NoError(t, err)
 
 		lk, err := lr.Lock(Key)
@@ -177,7 +159,7 @@ func TestLock(t *testing.T) {
 		gw := &gwMock{}
 		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(true, 42, nil)
 
-		lr, err := NewLockerWithGateway(gw, TTL)
+		lr, err := NewLocker(gw, TTL)
 		assert.NoError(t, err)
 		lk, err := lr.NewLock(Key)
 		assert.NoError(t, err)
@@ -199,7 +181,7 @@ func TestLock(t *testing.T) {
 		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(true, 42, nil)
 		gw.On("Del", Key, mock.AnythingOfType("string")).Return(true, nil)
 
-		lr, err := NewLockerWithGateway(gw, TTL)
+		lr, err := NewLocker(gw, TTL)
 		assert.NoError(t, err)
 		lk, err := lr.NewLock(Key)
 		assert.NoError(t, err)
@@ -220,7 +202,7 @@ func TestLock(t *testing.T) {
 		gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(false, 42, nil)
 		retryCount := 2
 
-		lr, err := NewLockerWithGateway(gw, TTL, WithRetryCount(retryCount))
+		lr, err := NewLocker(gw, TTL, WithRetryCount(retryCount))
 		assert.NoError(t, err)
 		lk, err := lr.NewLock(Key)
 		assert.NoError(t, err)
@@ -240,7 +222,7 @@ func TestLockWithContext(t *testing.T) {
 	gw := &gwMock{}
 	gw.On("Set", Key, mock.AnythingOfType("string"), ttl).Return(false, 42, nil)
 
-	lr, err := NewLockerWithGateway(gw, TTL, WithRetryCount(2), WithRetryDelay(time.Millisecond*200))
+	lr, err := NewLocker(gw, TTL, WithRetryCount(2), WithRetryDelay(time.Millisecond*200))
 	assert.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)

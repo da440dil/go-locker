@@ -45,7 +45,8 @@ func NewGateway(client *redis.Client) *Gateway {
 
 // Set sets key value and TTL of key if key not exists.
 // Updates TTL of key if key exists and key value equals input value.
-// Returns operation success flag, TTL of a key in milliseconds.
+// Returns operation success flag.
+// Returns TTL of a key in milliseconds.
 func (gw *Gateway) Set(key, value string, ttl int) (bool, int, error) {
 	res, err := set.Run(gw.client, []string{key}, value, ttl).Result()
 	if err != nil {

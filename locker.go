@@ -6,16 +6,14 @@ import (
 	"errors"
 	"sync"
 	"time"
-
-	gw "github.com/da440dil/go-locker/redis"
-	"github.com/go-redis/redis"
 )
 
 // Gateway to storage to store a lock state.
 type Gateway interface {
 	// Set sets key value and TTL of key if key not exists.
 	// Updates TTL of key if key exists and key value equals input value.
-	// Returns operation success flag, TTL of a key in milliseconds.
+	// Returns operation success flag.
+	// Returns TTL of a key in milliseconds.
 	Set(key, value string, ttl int) (bool, int, error)
 	// Del deletes key if key value equals input value.
 	// Returns operation success flag.
@@ -101,17 +99,11 @@ type Locker struct {
 	prefix      string
 }
 
-// NewLocker creates new Locker using Redis Gateway.
+// NewLocker creates new Locker.
+// Gateway is gateway to storage to store a lock state.
 // TTL is TTL of a key, must be greater than or equal to 1 millisecond.
 // Options are functional options.
-func NewLocker(client *redis.Client, ttl time.Duration, options ...Option) (*Locker, error) {
-	return NewLockerWithGateway(gw.NewGateway(client), ttl, options...)
-}
-
-// NewLockerWithGateway creates new Locker using custom Gateway.
-// TTL is TTL of a key, must be greater than or equal to 1 millisecond.
-// Options are functional options.
-func NewLockerWithGateway(gateway Gateway, ttl time.Duration, options ...Option) (*Locker, error) {
+func NewLocker(gateway Gateway, ttl time.Duration, options ...Option) (*Locker, error) {
 	if ttl < time.Millisecond {
 		return nil, ErrInvalidTTL
 	}
@@ -229,7 +221,8 @@ type Lock struct {
 }
 
 // Lock applies the lock.
-// Returns operation success flag, TTL of a key in milliseconds.
+// Returns operation success flag.
+// Returns TTL of a key in milliseconds.
 func (lk *Lock) Lock() (bool, int, error) {
 	lk.mutex.Lock()
 	defer lk.mutex.Unlock()
