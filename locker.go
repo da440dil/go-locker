@@ -21,19 +21,25 @@ type Gateway interface {
 }
 
 // ErrInvalidTTL is the error returned when NewLocker receives invalid value of TTL.
-var ErrInvalidTTL = errors.New("TTL must be greater than or equal to 1 millisecond")
+var ErrInvalidTTL = errors.New("locker: TTL must be greater than or equal to 1 millisecond")
 
 // ErrInvalidRetryCount is the error returned when WithRetryCount receives invalid value.
-var ErrInvalidRetryCount = errors.New("RetryCount must be greater than or equal to zero")
+var ErrInvalidRetryCount = errors.New("locker: retryCount must be greater than or equal to zero")
 
 // ErrInvalidRetryDelay is the error returned when WithRetryDelay receives invalid value.
-var ErrInvalidRetryDelay = errors.New("RetryDelay must be greater than or equal to 1 millisecond")
+var ErrInvalidRetryDelay = errors.New(
+	"locker: retryDelay must be greater than or equal to 1 millisecond and " +
+		"must be greater than or equal to retryJitter",
+)
 
 // ErrInvalidRetryJitter is the error returned when WithRetryJitter receives invalid value.
-var ErrInvalidRetryJitter = errors.New("RetryJitter must be greater than or equal to 1 millisecond")
+var ErrInvalidRetryJitter = errors.New(
+	"locker: retryJitter must be greater than or equal to 1 millisecond and " +
+		"must be less than or equal to retryDelay",
+)
 
 // ErrInvalidKey is the error returned when key size is greater than 512 MB.
-var ErrInvalidKey = errors.New("Key size must be less than or equal to 512 MB")
+var ErrInvalidKey = errors.New("locker: key size must be less than or equal to 512 MB")
 
 // Option is function returned by functions for setting Locker options.
 type Option func(lk *Locker) error
@@ -53,6 +59,7 @@ func WithRetryCount(v int) Option {
 
 // WithRetryDelay sets delay between retries if key is locked.
 // Must be greater than or equal to 1 millisecond.
+// Must be greater than or equal to retryJitter.
 // By default equals 0.
 func WithRetryDelay(v time.Duration) Option {
 	return func(lr *Locker) error {
@@ -60,6 +67,9 @@ func WithRetryDelay(v time.Duration) Option {
 			return ErrInvalidRetryDelay
 		}
 		lr.retryDelay = durationToMilliseconds(v)
+		if lr.retryDelay < lr.retryJitter {
+			return ErrInvalidRetryDelay
+		}
 		return nil
 	}
 }
@@ -67,6 +77,7 @@ func WithRetryDelay(v time.Duration) Option {
 // WithRetryJitter sets maximum time randomly added to delays between retries
 // to improve performance under high contention.
 // Must be greater than or equal to 1 millisecond.
+// Must be less than or equal to retryDelay.
 // By default equals 0.
 func WithRetryJitter(v time.Duration) Option {
 	return func(lr *Locker) error {
@@ -74,6 +85,9 @@ func WithRetryJitter(v time.Duration) Option {
 			return ErrInvalidRetryJitter
 		}
 		lr.retryJitter = durationToMilliseconds(v)
+		if lr.retryJitter > lr.retryDelay {
+			return ErrInvalidRetryJitter
+		}
 		return nil
 	}
 }
@@ -125,10 +139,27 @@ type Opt func(lk *Lock)
 
 // WithContext sets lock context.
 // Context allows cancelling lock attempts prematurely.
-func WithContext(ctx context.Context) func(lk *Lock) {
+func WithContext(ctx context.Context) Opt {
 	return func(lk *Lock) {
 		lk.ctx = ctx
 	}
+}
+
+// Lock creates and applies new Lock.
+// Returns TTLError if Lock failed to lock the key.
+func (lr *Locker) Lock(key string, opts ...Opt) (*Lock, error) {
+	lock, err := lr.NewLock(key, opts...)
+	if err != nil {
+		return nil, err
+	}
+	ok, ttl, err := lock.Lock()
+	if err != nil {
+		return lock, err
+	}
+	if !ok {
+		return lock, newTTLError(ttl)
+	}
+	return lock, nil
 }
 
 // NewLock creates new Lock.
@@ -152,23 +183,6 @@ func (lr *Locker) NewLock(key string, opts ...Opt) (*Lock, error) {
 		lk.ctx = context.Background()
 	}
 	return lk, nil
-}
-
-// Lock creates and applies new Lock.
-// Returns TTLError if Lock failed to lock the key.
-func (lr *Locker) Lock(key string, opts ...Opt) (*Lock, error) {
-	lock, err := lr.NewLock(key, opts...)
-	if err != nil {
-		return nil, err
-	}
-	ok, ttl, err := lock.Lock()
-	if err != nil {
-		return lock, err
-	}
-	if !ok {
-		return lock, newTTLError(ttl)
-	}
-	return lock, nil
 }
 
 func durationToMilliseconds(duration time.Duration) int {

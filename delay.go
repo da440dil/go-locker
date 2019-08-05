@@ -15,10 +15,10 @@ func newDelay(retryDelay int, retryJitter int) int {
 	if retryJitter == 0 {
 		return retryDelay
 	}
-	if retryDelay < retryJitter {
-		retryDelay, retryJitter = retryJitter, retryDelay
-	}
 	min := retryDelay - retryJitter
+	if min <= 0 {
+		return 0
+	}
 	max := retryDelay + retryJitter
 	return rnd.Intn(max-min+1) + min
 }

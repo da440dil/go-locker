@@ -38,7 +38,7 @@ var invalidKey = *(*string)(unsafe.Pointer(&p))
 func TestNewLocker(t *testing.T) {
 	gw := &gwMock{}
 
-	t.Run("ErrInvalidTTL", func(t *testing.T) {
+	t.Run("ttl < 1 millisecond", func(t *testing.T) {
 		_, err := NewLocker(gw, time.Microsecond)
 		assert.Error(t, err)
 		assert.Equal(t, ErrInvalidTTL, err)
@@ -54,25 +54,48 @@ func TestNewLocker(t *testing.T) {
 func TestOptions(t *testing.T) {
 	gw := &gwMock{}
 
-	t.Run("ErrInvalidRetryCount", func(t *testing.T) {
+	t.Run("retryCount = -1", func(t *testing.T) {
 		_, err := NewLocker(gw, TTL, WithRetryCount(-1))
 		assert.Error(t, err)
 		assert.Equal(t, ErrInvalidRetryCount, err)
 	})
 
-	t.Run("ErrInvalidRetryDelay", func(t *testing.T) {
+	t.Run("retryDelay < 1 millisecond", func(t *testing.T) {
 		_, err := NewLocker(gw, TTL, WithRetryDelay(time.Microsecond))
 		assert.Error(t, err)
 		assert.Equal(t, ErrInvalidRetryDelay, err)
 	})
 
-	t.Run("ErrInvalidRetryJitter", func(t *testing.T) {
+	t.Run("retryDelay < retryJitter", func(t *testing.T) {
+		_, err := NewLocker(
+			gw,
+			TTL,
+			WithRetryDelay(time.Millisecond*3),
+			WithRetryJitter(time.Millisecond*2),
+			WithRetryDelay(time.Millisecond*1),
+		)
+		assert.Error(t, err)
+		assert.Equal(t, ErrInvalidRetryDelay, err)
+	})
+
+	t.Run("retryJitter < 1 millisecond", func(t *testing.T) {
 		_, err := NewLocker(gw, TTL, WithRetryJitter(time.Microsecond))
 		assert.Error(t, err)
 		assert.Equal(t, ErrInvalidRetryJitter, err)
 	})
 
-	t.Run("ErrInvaldKey", func(t *testing.T) {
+	t.Run("retryJitter > retryDelay", func(t *testing.T) {
+		_, err := NewLocker(
+			gw,
+			TTL,
+			WithRetryDelay(time.Millisecond*2),
+			WithRetryJitter(time.Millisecond*3),
+		)
+		assert.Error(t, err)
+		assert.Equal(t, ErrInvalidRetryJitter, err)
+	})
+
+	t.Run("key size > 512 MB", func(t *testing.T) {
 		_, err := NewLocker(gw, TTL, WithPrefix(invalidKey))
 		assert.Error(t, err)
 		assert.Equal(t, ErrInvalidKey, err)
@@ -247,11 +270,18 @@ func TestTTLError(t *testing.T) {
 }
 
 func TestNewDelay(t *testing.T) {
-	retryDelay := 42
-	retryJitter := 0
-	t.Run(fmt.Sprintf("retryDelay %v retryJitter %v", retryDelay, retryJitter), func(t *testing.T) {
+	t.Run("retryJitter = 0", func(t *testing.T) {
+		retryDelay := 42
+		retryJitter := 0
 		v := newDelay(retryDelay, retryJitter)
 		assert.Equal(t, retryDelay, v)
+	})
+
+	t.Run("retryJitter = retryDelay", func(t *testing.T) {
+		retryDelay := 42
+		retryJitter := 42
+		v := newDelay(retryDelay, retryJitter)
+		assert.Equal(t, 0, v)
 	})
 
 	testCases := []struct {
@@ -261,18 +291,14 @@ func TestNewDelay(t *testing.T) {
 		{100, 20},
 		{200, 50},
 		{1000, 100},
-		{100, 1000},
 	}
 
 	for _, tc := range testCases {
 		retryDelay := tc.retryDelay
 		retryJitter := tc.retryJitter
 
-		t.Run(fmt.Sprintf("retryDelay %v retryJitter %v", retryDelay, retryJitter), func(t *testing.T) {
+		t.Run(fmt.Sprintf("retryDelay = %v; retryJitter = %v", retryDelay, retryJitter), func(t *testing.T) {
 			v := newDelay(retryDelay, retryJitter)
-			if retryDelay < retryJitter {
-				retryDelay, retryJitter = retryJitter, retryDelay
-			}
 			assert.True(t, v >= (retryDelay-retryJitter) && v <= (retryDelay+retryJitter))
 		})
 	}
