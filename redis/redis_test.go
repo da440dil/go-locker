@@ -27,7 +27,7 @@ func TestGateway(t *testing.T) {
 	timeout := time.Duration(TTL+20) * time.Millisecond
 
 	t.Run("set key value and TTL of key if key not exists", func(t *testing.T) {
-		gw := NewGateway(client)
+		gw := New(client)
 
 		ok, ttl, err := gw.Set(Key, Value, TTL)
 		assert.NoError(t, err)
@@ -48,7 +48,7 @@ func TestGateway(t *testing.T) {
 	})
 
 	t.Run("update TTL of key if key exists and key value equals input value", func(t *testing.T) {
-		gw := NewGateway(client)
+		gw := New(client)
 		gw.Set(Key, Value, TTL)
 
 		ok, ttl, err := gw.Set(Key, Value, TTL)
@@ -70,7 +70,7 @@ func TestGateway(t *testing.T) {
 	})
 
 	t.Run("neither set key value nor update TTL of key if key exists and key value not equals input value", func(t *testing.T) {
-		gw := NewGateway(client)
+		gw := New(client)
 		ttl2 := TTL / 2
 		storage.Set(Key, Value, ttl2)
 
@@ -88,7 +88,7 @@ func TestGateway(t *testing.T) {
 	})
 
 	t.Run("delete key if key value equals input value", func(t *testing.T) {
-		gw := NewGateway(client)
+		gw := New(client)
 		storage.Set(Key, Value, 0)
 
 		ok, err := gw.Del(Key, Value)
@@ -102,7 +102,7 @@ func TestGateway(t *testing.T) {
 	})
 
 	t.Run("not delete key if key value not equals input value", func(t *testing.T) {
-		gw := NewGateway(client)
+		gw := New(client)
 		storage.Set(Key, Value, 0)
 
 		ok, err := gw.Del(Key, fmt.Sprintf("%v#%v", Value, Value))
@@ -139,7 +139,7 @@ func BenchmarkGateway(b *testing.B) {
 	}
 
 	storage := &Storage{client, b}
-	gw := NewGateway(client)
+	gw := New(client)
 
 	for _, tc := range testCases {
 		b.Run(fmt.Sprintf("ttl %v", tc.ttl), func(b *testing.B) {
