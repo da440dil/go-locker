@@ -303,3 +303,9 @@ func TestNewDelay(t *testing.T) {
 		})
 	}
 }
+
+func TestLockerError(t *testing.T) {
+	v := "any"
+	err := lockerError(v)
+	assert.Equal(t, v, err.Error())
+}

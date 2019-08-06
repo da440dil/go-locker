@@ -3,7 +3,6 @@ package locker
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 )
@@ -20,26 +19,32 @@ type Gateway interface {
 	Del(key, value string) (bool, error)
 }
 
+type lockerError string
+
+func (e lockerError) Error() string {
+	return string(e)
+}
+
 // ErrInvalidTTL is the error returned when NewLocker receives invalid value of TTL.
-var ErrInvalidTTL = errors.New("locker: TTL must be greater than or equal to 1 millisecond")
+const ErrInvalidTTL = lockerError("locker: TTL must be greater than or equal to 1 millisecond")
 
 // ErrInvalidRetryCount is the error returned when WithRetryCount receives invalid value.
-var ErrInvalidRetryCount = errors.New("locker: retryCount must be greater than or equal to zero")
+const ErrInvalidRetryCount = lockerError("locker: retryCount must be greater than or equal to zero")
 
 // ErrInvalidRetryDelay is the error returned when WithRetryDelay receives invalid value.
-var ErrInvalidRetryDelay = errors.New(
+const ErrInvalidRetryDelay = lockerError(
 	"locker: retryDelay must be greater than or equal to 1 millisecond and " +
 		"must be greater than or equal to retryJitter",
 )
 
 // ErrInvalidRetryJitter is the error returned when WithRetryJitter receives invalid value.
-var ErrInvalidRetryJitter = errors.New(
+const ErrInvalidRetryJitter = lockerError(
 	"locker: retryJitter must be greater than or equal to 1 millisecond and " +
 		"must be less than or equal to retryDelay",
 )
 
 // ErrInvalidKey is the error returned when key size is greater than 512 MB.
-var ErrInvalidKey = errors.New("locker: key size must be less than or equal to 512 MB")
+const ErrInvalidKey = lockerError("locker: key size must be less than or equal to 512 MB")
 
 // Option is function returned by functions for setting Locker options.
 type Option func(lk *Locker) error

@@ -2,16 +2,20 @@
 package redis
 
 import (
-	"errors"
-
 	"github.com/go-redis/redis"
 )
 
+type gatewayError string
+
+func (e gatewayError) Error() string {
+	return string(e)
+}
+
 // ErrInvalidResponse is the error returned when Redis command returns response of invalid type.
-var ErrInvalidResponse = errors.New("locker/redis: invalid response")
+const ErrInvalidResponse = gatewayError("locker/redis: invalid response")
 
 // ErrKeyNameClash is the error returned when Redis key exists and has no TTL.
-var ErrKeyNameClash = errors.New("locker/redis: key name clash")
+const ErrKeyNameClash = gatewayError("locker/redis: key name clash")
 
 var set = redis.NewScript(
 	"local v = redis.call(\"get\", KEYS[1]) " +
