@@ -5,6 +5,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	gw "github.com/da440dil/go-locker/memory"
 )
 
 // Gateway to storage to store a lock state.
@@ -48,6 +50,17 @@ const ErrInvalidKey = lockerError("locker: key size must be less than or equal t
 
 // Option is function returned by functions for setting Locker options.
 type Option func(lk *Locker) error
+
+// WithGateway sets locker gateway.
+// Gateway is gateway to storage to store a lock state.
+// If gateway not set locker creates new memory gateway
+// with expired keys cleanup every 100 milliseconds.
+func WithGateway(v Gateway) Option {
+	return func(lr *Locker) error {
+		lr.gateway = v
+		return nil
+	}
+}
 
 // WithRetryCount sets maximum number of retries if key is locked.
 // Must be greater than or equal to 0.
@@ -118,23 +131,24 @@ type Locker struct {
 	prefix      string
 }
 
-// NewLocker creates new Locker.
-// Gateway is gateway to storage to store a lock state.
+// New creates new Locker.
 // TTL is TTL of a key, must be greater than or equal to 1 millisecond.
 // Options are functional options.
-func NewLocker(gateway Gateway, ttl time.Duration, options ...Option) (*Locker, error) {
+func New(ttl time.Duration, options ...Option) (*Locker, error) {
 	if ttl < time.Millisecond {
 		return nil, ErrInvalidTTL
 	}
 	lr := &Locker{
-		gateway: gateway,
-		ttl:     durationToMilliseconds(ttl),
+		ttl: durationToMilliseconds(ttl),
 	}
 	for _, fn := range options {
 		err := fn(lr)
 		if err != nil {
 			return nil, err
 		}
+	}
+	if lr.gateway == nil {
+		lr.gateway = gw.New(time.Millisecond * 100)
 	}
 	return lr, nil
 }
