@@ -35,8 +35,8 @@ func ExampleLocker() {
 				}
 			}()
 		} else {
-			if e, ok := err.(locker.TTLError); ok {
-				fmt.Printf("Locker #%v has failed to lock the key, retry after %v\n", n, e.TTL())
+			if _, ok := err.(locker.TTLError); ok {
+				fmt.Printf("Locker #%v has failed to lock the key\n", n)
 			} else {
 				panic(err)
 			}
@@ -48,6 +48,6 @@ func ExampleLocker() {
 	wg.Wait()
 	// Output:
 	// Locker #1 has locked the key
-	// Locker #2 has failed to lock the key, retry after 100ms
+	// Locker #2 has failed to lock the key
 	// Locker #1 has unlocked the key
 }
