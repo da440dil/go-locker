@@ -18,27 +18,27 @@ func ExampleLocker_withoutGateway() {
 	}
 	key := "key"
 	var wg sync.WaitGroup
-	lockUnlock := func() {
+	lockUnlock := func(n int) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
 			lk, err := lr.Lock(key)
 			if err == nil {
-				fmt.Println("Locker has locked the key")
+				fmt.Printf("Locker #%v has locked the key\n", n)
 				time.Sleep(time.Millisecond * 50)
 				ok, err := lk.Unlock()
 				if err != nil {
 					panic(err)
 				}
 				if ok {
-					fmt.Println("Locker has unlocked the key")
+					fmt.Printf("Locker #%v has unlocked the key\n", n)
 				} else {
-					fmt.Println("Locker has failed to unlock the key")
+					fmt.Printf("Locker #%v has failed to unlock the key \n", n)
 				}
 			} else {
 				if e, ok := err.(locker.TTLError); ok {
-					fmt.Printf("Locker has failed to lock the key, retry after %v\n", e.TTL())
+					fmt.Printf("Locker #%v has failed to lock the key, retry after %v\n", n, e.TTL())
 				} else {
 					panic(err)
 				}
@@ -46,9 +46,9 @@ func ExampleLocker_withoutGateway() {
 		}()
 	}
 
-	lockUnlock() // Locker has locked the key
-	lockUnlock() // Locker has failed to lock the key, retry after 100ms
-	// Locker has unlocked the key
+	lockUnlock(1) // Locker #1 has locked the key
+	lockUnlock(2) // Locker #2 has failed to lock the key, retry after 100ms
+	// Locker #1 has unlocked the key
 	wg.Wait()
 }
 
@@ -60,27 +60,27 @@ func ExampleLocker_memoryGateway() {
 	}
 	key := "key"
 	var wg sync.WaitGroup
-	lockUnlock := func() {
+	lockUnlock := func(n int) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
 			lk, err := lr.Lock(key)
 			if err == nil {
-				fmt.Println("Locker has locked the key")
+				fmt.Printf("Locker #%v has locked the key\n", n)
 				time.Sleep(time.Millisecond * 50)
 				ok, err := lk.Unlock()
 				if err != nil {
 					panic(err)
 				}
 				if ok {
-					fmt.Println("Locker has unlocked the key")
+					fmt.Printf("Locker #%v has unlocked the key\n", n)
 				} else {
-					fmt.Println("Locker has failed to unlock the key")
+					fmt.Printf("Locker #%v has failed to unlock the key \n", n)
 				}
 			} else {
 				if e, ok := err.(locker.TTLError); ok {
-					fmt.Printf("Locker has failed to lock the key, retry after %v\n", e.TTL())
+					fmt.Printf("Locker #%v has failed to lock the key, retry after %v\n", n, e.TTL())
 				} else {
 					panic(err)
 				}
@@ -88,9 +88,9 @@ func ExampleLocker_memoryGateway() {
 		}()
 	}
 
-	lockUnlock() // Locker has locked the key
-	lockUnlock() // Locker has failed to lock the key, retry after 100ms
-	// Locker has unlocked the key
+	lockUnlock(1) // Locker #1 has locked the key
+	lockUnlock(2) // Locker #2 has failed to lock the key, retry after 100ms
+	// Locker #1 has unlocked the key
 	wg.Wait()
 }
 
@@ -105,27 +105,27 @@ func ExampleLocker_redisGateway() {
 	}
 	key := "key"
 	var wg sync.WaitGroup
-	lockUnlock := func() {
+	lockUnlock := func(n int) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
 			lk, err := lr.Lock(key)
 			if err == nil {
-				fmt.Println("Locker has locked the key")
+				fmt.Printf("Locker #%v has locked the key\n", n)
 				time.Sleep(time.Millisecond * 50)
 				ok, err := lk.Unlock()
 				if err != nil {
 					panic(err)
 				}
 				if ok {
-					fmt.Println("Locker has unlocked the key")
+					fmt.Printf("Locker #%v has unlocked the key\n", n)
 				} else {
-					fmt.Println("Locker has failed to unlock the key")
+					fmt.Printf("Locker #%v has failed to unlock the key \n", n)
 				}
 			} else {
 				if e, ok := err.(locker.TTLError); ok {
-					fmt.Printf("Locker has failed to lock the key, retry after %v\n", e.TTL())
+					fmt.Printf("Locker #%v has failed to lock the key, retry after %v\n", n, e.TTL())
 				} else {
 					panic(err)
 				}
@@ -133,8 +133,8 @@ func ExampleLocker_redisGateway() {
 		}()
 	}
 
-	lockUnlock() // Locker has locked the key
-	lockUnlock() // Locker has failed to lock the key, retry after 100ms
-	// Locker has unlocked the key
+	lockUnlock(1) // Locker #1 has locked the key
+	lockUnlock(2) // Locker #2 has failed to lock the key, retry after 100ms
+	// Locker #1 has unlocked the key
 	wg.Wait()
 }
