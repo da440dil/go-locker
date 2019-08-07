@@ -24,11 +24,12 @@ func (lk *Lock) Lock() (bool, int, error) {
 
 	var token = lk.token
 	if token == "" {
-		var err error
-		token, err = newToken()
+		buf := make([]byte, 16)
+		_, err := rand.Read(buf)
 		if err != nil {
 			return false, 0, err
 		}
+		token = base64.URLEncoding.EncodeToString(buf)
 	}
 
 	ok, ttl, err := lk.gateway.Set(lk.key, token, lk.ttl)
@@ -58,13 +59,4 @@ func (lk *Lock) Unlock() (bool, error) {
 	token := lk.token
 	lk.token = ""
 	return lk.gateway.Del(lk.key, token)
-}
-
-func newToken() (string, error) {
-	buf := make([]byte, 16)
-	_, err := rand.Read(buf)
-	if err != nil {
-		return "", err
-	}
-	return base64.URLEncoding.EncodeToString(buf), nil
 }
