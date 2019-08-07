@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/da440dil/go-locker"
-	gm "github.com/da440dil/go-locker/memory"
-	gr "github.com/da440dil/go-locker/redis"
+	gm "github.com/da440dil/go-locker/gateway/memory"
+	gr "github.com/da440dil/go-locker/gateway/redis"
 	"github.com/go-redis/redis"
 )
 

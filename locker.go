@@ -4,7 +4,7 @@ package locker
 import (
 	"time"
 
-	gw "github.com/da440dil/go-locker/memory"
+	gw "github.com/da440dil/go-locker/gateway/memory"
 )
 
 // Gateway to storage to store a lock state.
