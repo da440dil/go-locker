@@ -2,6 +2,8 @@ package locker
 
 import (
 	"errors"
+	"io"
+	"strings"
 	"testing"
 	"time"
 	"unsafe"
@@ -52,6 +54,12 @@ func TestNewLocker(t *testing.T) {
 func TestOptions(t *testing.T) {
 	gw := &gwMock{}
 
+	t.Run("ErrInvalidRandSize", func(t *testing.T) {
+		_, err := New(TTL, WithGateway(gw), WithRandSize(0))
+		assert.Error(t, err)
+		assert.Equal(t, ErrInvalidRandSize, err)
+	})
+
 	t.Run("ErrInvalidKey", func(t *testing.T) {
 		_, err := New(TTL, WithGateway(gw), WithPrefix(invalidKey))
 		assert.Error(t, err)
@@ -60,7 +68,13 @@ func TestOptions(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		gw := &gwMock{}
-		lr, err := New(TTL, WithGateway(gw), WithPrefix(""))
+		lr, err := New(
+			TTL,
+			WithGateway(gw),
+			WithRandReader(strings.NewReader("")),
+			WithRandSize(1),
+			WithPrefix(""),
+		)
 		assert.NoError(t, err)
 		assert.IsType(t, &Locker{}, lr)
 	})
@@ -160,12 +174,9 @@ func TestLock(t *testing.T) {
 		assert.NoError(t, err)
 		lk.Lock()
 
-		ok1, err1 := lk.Unlock()
-		ok2, err2 := lk.Unlock()
-		assert.NoError(t, err1)
-		assert.NoError(t, err2)
-		assert.Equal(t, true, ok1)
-		assert.Equal(t, false, ok2)
+		ok, err := lk.Unlock()
+		assert.NoError(t, err)
+		assert.Equal(t, true, ok)
 		gw.AssertExpectations(t)
 		gw.AssertNumberOfCalls(t, "Del", 1)
 	})
@@ -184,9 +195,20 @@ func TestLockerError(t *testing.T) {
 	assert.Equal(t, v, err.Error())
 }
 
-func TestDefaultGateway(t *testing.T) {
+func TestLockerDefaultGateway(t *testing.T) {
 	c, err := New(TTL)
 	assert.NoError(t, err)
 	assert.IsType(t, &Locker{}, c)
 	assert.NotNil(t, c.gateway)
+}
+
+func TestLockerRandReader(t *testing.T) {
+	gw := &gwMock{}
+	lr, err := New(TTL, WithGateway(gw), WithRandReader(strings.NewReader("")))
+	assert.NoError(t, err)
+
+	lk, err := lr.Lock(Key)
+	assert.Error(t, err)
+	assert.Equal(t, io.EOF, err)
+	assert.Nil(t, lk)
 }

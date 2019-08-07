@@ -2,6 +2,9 @@
 package locker
 
 import (
+	"crypto/rand"
+	"encoding/base64"
+	"io"
 	"time"
 
 	gw "github.com/da440dil/go-locker/gateway/memory"
@@ -31,6 +34,9 @@ const ErrInvalidTTL = lockerError("locker: TTL must be greater than or equal to 
 // ErrInvalidKey is the error returned when key size is greater than 512 MB.
 const ErrInvalidKey = lockerError("locker: key size must be less than or equal to 512 MB")
 
+// ErrInvalidRandSize is the error returned when rand size less than or equal to 0.
+const ErrInvalidRandSize = lockerError("locker: rand size greater than 0.")
+
 // Option is function returned by functions for setting Locker options.
 type Option func(lk *Locker) error
 
@@ -41,6 +47,28 @@ type Option func(lk *Locker) error
 func WithGateway(v Gateway) Option {
 	return func(lr *Locker) error {
 		lr.gateway = v
+		return nil
+	}
+}
+
+// WithRandReader sets random generator for generation lock tokens.
+// By default crypto/rand.Reader
+func WithRandReader(v io.Reader) Option {
+	return func(lr *Locker) error {
+		lr.randReader = v
+		return nil
+	}
+}
+
+// WithRandSize sets bytes size to read from random generator for generation lock tokens.
+// Must be greater than 0.
+// By default 16.
+func WithRandSize(v int) Option {
+	return func(lr *Locker) error {
+		if v <= 0 {
+			return ErrInvalidRandSize
+		}
+		lr.randSize = v
 		return nil
 	}
 }
@@ -58,9 +86,11 @@ func WithPrefix(v string) Option {
 
 // Locker defines parameters for creating new Lock.
 type Locker struct {
-	gateway Gateway
-	ttl     int
-	prefix  string
+	gateway    Gateway
+	randReader io.Reader
+	randSize   int
+	ttl        int
+	prefix     string
 }
 
 // New creates new Locker.
@@ -71,7 +101,9 @@ func New(ttl time.Duration, options ...Option) (*Locker, error) {
 		return nil, ErrInvalidTTL
 	}
 	lr := &Locker{
-		ttl: durationToMilliseconds(ttl),
+		randReader: rand.Reader,
+		randSize:   16,
+		ttl:        durationToMilliseconds(ttl),
 	}
 	for _, fn := range options {
 		err := fn(lr)
@@ -108,10 +140,15 @@ func (lr *Locker) NewLock(key string) (*Lock, error) {
 	if !isValidKey(key) {
 		return nil, ErrInvalidKey
 	}
+	buf := make([]byte, lr.randSize)
+	if _, err := io.ReadFull(lr.randReader, buf); err != nil {
+		return nil, err
+	}
 	lk := &Lock{
 		gateway: lr.gateway,
 		ttl:     lr.ttl,
 		key:     key,
+		token:   base64.URLEncoding.EncodeToString(buf),
 	}
 	return lk, nil
 }
