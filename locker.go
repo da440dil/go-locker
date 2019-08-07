@@ -106,8 +106,7 @@ func New(ttl time.Duration, options ...Option) (*Locker, error) {
 		ttl:        durationToMilliseconds(ttl),
 	}
 	for _, fn := range options {
-		err := fn(lr)
-		if err != nil {
+		if err := fn(lr); err != nil {
 			return nil, err
 		}
 	}
