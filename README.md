@@ -8,8 +8,23 @@
 
 Distributed locking with pluggable storage to store a lock state.
 
-## Usage
+## Basic usage
 
-- [example](./examples/locker-gateway-default/main.go) usage with default gateway.
-- [example](./examples/locker-gateway-memory/main.go) usage with memory gateway.
-- [example](./examples/locker-gateway-redis/main.go) usage with Redis gateway.
+```go
+// Create new Locker
+lr, _ := locker.New(time.Millisecond * 100)
+// Create and apply lock
+if lk, err := lr.Lock("key"); err != nil { 
+	if e, ok := err.(locker.TTLError); ok {
+		// Use e.TTL() if need
+	}	
+} else {
+	lk.Unlock("key") // Release lock
+}
+```
+
+## Example usage
+
+- [example](./examples/locker-gateway-default/main.go) usage with default [gateway](./gateway/memory/memory.go)
+- [example](./examples/locker-gateway-memory/main.go) usage with memory [gateway](./gateway/memory/memory.go)
+- [example](./examples/locker-gateway-redis/main.go) usage with [Redis](https://redis.io) [gateway](./gateway/redis/redis.go)
