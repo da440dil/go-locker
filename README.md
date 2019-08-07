@@ -17,7 +17,9 @@ lr, _ := locker.New(time.Millisecond * 100)
 if lk, err := lr.Lock("key"); err != nil { 
 	if e, ok := err.(locker.TTLError); ok {
 		// Use e.TTL() if need
-	}	
+	}	else {
+		// Handle err
+	}
 } else {
 	lk.Unlock("key") // Release lock
 }
