@@ -30,4 +30,4 @@ if lk, err := lr.Lock("key"); err != nil {
 - [example](./examples/locker-gateway-default/main.go) usage with default [gateway](./gateway/memory/memory.go)
 - [example](./examples/locker-gateway-memory/main.go) usage with memory [gateway](./gateway/memory/memory.go)
 - [example](./examples/locker-gateway-redis/main.go) usage with [Redis](https://redis.io) [gateway](./gateway/redis/redis.go)
-- [example](./examples/locker-with-retry/main.go) usage with [retry](https://github.com/da440dil/go-runner)
+- [example](./examples/locker-with-retry/main.go) usage with [retry](https://github.com/da440dil/go-trier)

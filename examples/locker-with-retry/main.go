@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/da440dil/go-locker"
-	"github.com/da440dil/go-runner"
+	"github.com/da440dil/go-trier"
 )
 
 func main() {
@@ -14,12 +14,12 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	// Create runner
-	r, err := runner.New(
+	// Create trier
+	t, err := trier.New(
 		// Set maximum number of retries
-		runner.WithRetryCount(1),
+		trier.WithRetryCount(1),
 		// Set delay between retries
-		runner.WithRetryDelay(time.Millisecond*40),
+		trier.WithRetryDelay(time.Millisecond*40),
 	)
 	if err != nil {
 		panic(err)
@@ -41,7 +41,7 @@ func main() {
 	}
 	for i := 1; i < 4; i++ {
 		// Run function
-		if err = r.Run(fn(i)); err != nil {
+		if err = t.Try(fn(i)); err != nil {
 			panic(err)
 		}
 	}
