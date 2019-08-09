@@ -14,11 +14,11 @@ import (
 type Gateway interface {
 	// Set sets key value and TTL of key if key not exists.
 	// Updates TTL of key if key exists and key value equals input value.
-	// Returns operation success flag.
+	// Returns execution success flag.
 	// Returns TTL of a key in milliseconds.
 	Set(key, value string, ttl int) (bool, int, error)
 	// Del deletes key if key value equals input value.
-	// Returns operation success flag.
+	// Returns execution success flag.
 	Del(key, value string) (bool, error)
 }
 
