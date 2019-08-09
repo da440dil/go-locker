@@ -25,18 +25,18 @@ func main() {
 		panic(err)
 	}
 	// Create retriable function
-	fn := func(n int) func() (bool, error) {
-		return func() (bool, error) {
+	fn := func(n int) func() (bool, time.Duration, error) {
+		return func() (bool, time.Duration, error) {
 			_, err := lr.Lock("key")
 			if err == nil {
 				fmt.Printf("Locker #%v has locked the key\n", n)
-				return true, nil // Success
+				return true, -1, nil // Success
 			}
 			if e, ok := err.(locker.TTLError); ok {
 				fmt.Printf("Locker #%v has failed to lock the key, retry after %v\n", n, e.TTL())
-				return false, nil // Failure
+				return false, e.TTL(), nil // Failure
 			}
-			return false, err // Error
+			return false, -1, err // Error
 		}
 	}
 	for i := 1; i < 4; i++ {
