@@ -6,7 +6,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/da440dil/go-locker)](https://goreportcard.com/report/github.com/da440dil/go-locker)
 
 
-Distributed locking with pluggable storage for storing a lock state.
+Distributed locking with pluggable storage for storing locks state.
 
 ## Basic usage
 
