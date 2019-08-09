@@ -37,7 +37,7 @@ var del = redis.NewScript(
 		"return 0",
 )
 
-// Gateway is a gateway to Redis storage.
+// Gateway to Redis storage.
 type Gateway struct {
 	client *redis.Client
 }
