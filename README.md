@@ -20,6 +20,7 @@ if lk, err := lr.Lock("key"); err != nil {
 		// Handle err
 	}
 } else {
+	// Do smth
 	lk.Unlock("key") // Release lock
 }
 ```
