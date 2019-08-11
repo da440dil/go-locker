@@ -35,7 +35,7 @@ const ErrInvalidTTL = lockerError("locker: TTL must be greater than or equal to 
 const ErrInvalidKey = lockerError("locker: key size must be less than or equal to 512 MB")
 
 // ErrInvalidRandSize is the error returned when rand size less than or equal to 0.
-const ErrInvalidRandSize = lockerError("locker: rand size greater than 0.")
+const ErrInvalidRandSize = lockerError("locker: rand size must be greater than 0")
 
 // Option is function returned by functions for setting Locker options.
 type Option func(lk *Locker) error
