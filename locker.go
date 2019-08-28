@@ -166,7 +166,7 @@ type TTLError interface {
 	TTL() time.Duration // Returns TTL of a key.
 }
 
-const ttlErrorMsg = "Conflict"
+const ttlErrorMsg = "locker: conflict"
 
 type ttlError struct {
 	ttl time.Duration
