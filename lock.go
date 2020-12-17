@@ -38,7 +38,7 @@ func (r Result) OK() bool {
 	return r.ttl < -2
 }
 
-// TTL of the current window in milliseconds.
+// TTL of the lock in milliseconds.
 // Makes sense if operation failed, otherwise ttl is less than 0.
 func (r Result) TTL() time.Duration {
 	return time.Duration(r.ttl) * time.Millisecond
