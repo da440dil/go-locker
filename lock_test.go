@@ -38,7 +38,7 @@ func TestLock(t *testing.T) {
 	require.False(t, result.OK())
 	require.True(t, result.TTL() >= msToDuration(0) && result.TTL() <= msToDuration(ttl))
 
-	time.Sleep(result.TTL()) // wait for the ttl of the key is over
+	time.Sleep(result.TTL() + 100*time.Millisecond) // wait for the ttl of the key is over
 
 	result, err = lock2.Lock(ctx)
 	require.NoError(t, err)
