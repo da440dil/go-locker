@@ -5,29 +5,10 @@
 [![GoDoc](https://godoc.org/github.com/da440dil/go-locker?status.svg)](https://godoc.org/github.com/da440dil/go-locker)
 [![Go Report Card](https://goreportcard.com/badge/github.com/da440dil/go-locker)](https://goreportcard.com/report/github.com/da440dil/go-locker)
 
-Distributed locking with pluggable storage for storing locks state.
+Distributed locking using [Redis](https://redis.io/).
 
-## Basic usage
+Example usage:
 
-```go
-// Create new Locker
-lr, _ := locker.New(time.Millisecond * 100)
-// Create and apply lock
-if lk, err := lr.Lock("key"); err != nil { 
-	if e, ok := err.(locker.TTLError); ok {
-		// Use e.TTL() if need
-	}	else {
-		// Handle err
-	}
-} else {
-	// Do smth
-	lk.Unlock("key") // Release lock
-}
-```
+- [example](./examples/main.go) 
 
-## Example usage
-
-- [example](./examples/locker-gateway-default/main.go) usage with default [gateway](./gateway/memory/memory.go)
-- [example](./examples/locker-gateway-memory/main.go) usage with memory [gateway](./gateway/memory/memory.go)
-- [example](./examples/locker-gateway-redis/main.go) usage with [Redis](https://redis.io) [gateway](./gateway/redis/redis.go)
-- [example](./examples/locker-with-retry/main.go) usage with [retry](https://github.com/da440dil/go-trier)
+    ```go run examples/main.go```
