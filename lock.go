@@ -28,20 +28,18 @@ end
 return 0
 `)
 
-// Result of lock() operation.
-type Result struct {
-	ttl int64
-}
+// Result of applying a lock.
+type Result int64
 
 // OK is operation success flag.
 func (r Result) OK() bool {
-	return r.ttl < -2
+	return r < -2
 }
 
 // TTL of a lock.
 // Makes sense if operation failed, otherwise ttl is less than 0.
 func (r Result) TTL() time.Duration {
-	return time.Duration(r.ttl) * time.Millisecond
+	return time.Duration(r) * time.Millisecond
 }
 
 var errInvalidResponse = errors.New("locker: invalid redis response")
@@ -55,22 +53,20 @@ type Lock struct {
 }
 
 // Lock applies the lock.
-func (lock *Lock) Lock(ctx context.Context) (Result, error) {
-	r := Result{}
+func (lock Lock) Lock(ctx context.Context) (Result, error) {
 	res, err := lockscr.Run(ctx, lock.client, []string{lock.key}, lock.token, lock.ttl).Result()
 	if err != nil {
-		return r, err
+		return Result(0), err
 	}
-	var ok bool
-	r.ttl, ok = res.(int64)
+	v, ok := res.(int64)
 	if !ok {
-		return r, errInvalidResponse
+		return Result(0), errInvalidResponse
 	}
-	return r, nil
+	return Result(v), nil
 }
 
 // Unlock releases the lock.
-func (lock *Lock) Unlock(ctx context.Context) (bool, error) {
+func (lock Lock) Unlock(ctx context.Context) (bool, error) {
 	res, err := unlockscr.Run(ctx, lock.client, []string{lock.key}, lock.token).Result()
 	if err != nil {
 		return false, err

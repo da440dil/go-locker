@@ -56,16 +56,15 @@ func NewLocker(client RedisClient, ttl time.Duration, options ...Option) *Locker
 }
 
 // Lock creates new lock.
-func (locker *Locker) Lock(key string) (*Lock, error) {
+func (locker *Locker) Lock(key string) (Lock, error) {
 	buf := make([]byte, locker.randSize)
 	if _, err := io.ReadFull(locker.randReader, buf); err != nil {
-		return nil, err
+		return Lock{}, err
 	}
-	lock := &Lock{
+	return Lock{
 		client: locker.client,
 		ttl:    locker.ttl,
 		key:    key,
 		token:  base64.URLEncoding.EncodeToString(buf),
-	}
-	return lock, nil
+	}, nil
 }

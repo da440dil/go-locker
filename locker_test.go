@@ -41,7 +41,7 @@ func TestLocker(t *testing.T) {
 	key := "key"
 	lock, err := locker.Lock(key)
 	require.NoError(t, err)
-	require.IsType(t, &Lock{}, lock)
+	require.IsType(t, Lock{}, lock)
 	require.Equal(t, "cXdlcnR5", lock.token)
 
 	locker = NewLocker(clientMock, time.Second, WithRandReader(strings.NewReader("")))
