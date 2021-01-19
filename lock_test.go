@@ -71,10 +71,10 @@ func TestLock(t *testing.T) {
 	lock = &Lock{clientMock, ttl, key, token}
 	clientMock.On("EvalSha", ctx, lockscr.Hash(), keys, token, ttl).Return(redis.NewCmdResult("", nil))
 	_, err = lock.Lock(ctx)
-	require.Equal(t, errInvalidResponse, err)
+	require.Equal(t, ErrUnexpectedRedisResponse, err)
 	clientMock.On("EvalSha", ctx, unlockscr.Hash(), keys, token).Return(redis.NewCmdResult("", nil))
 	_, err = lock.Unlock(ctx)
-	require.Equal(t, errInvalidResponse, err)
+	require.Equal(t, ErrUnexpectedRedisResponse, err)
 
 	clientMock.AssertExpectations(t)
 }

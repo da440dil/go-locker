@@ -42,7 +42,8 @@ func (r Result) TTL() time.Duration {
 	return time.Duration(r) * time.Millisecond
 }
 
-var errInvalidResponse = errors.New("locker: invalid redis response")
+// ErrUnexpectedRedisResponse is the error returned when Redis command returns response of unexpected type.
+var ErrUnexpectedRedisResponse = errors.New("locker: unexpected redis response")
 
 // Lock implements distributed locking.
 type Lock struct {
@@ -60,7 +61,7 @@ func (lock Lock) Lock(ctx context.Context) (Result, error) {
 	}
 	v, ok := res.(int64)
 	if !ok {
-		return Result(0), errInvalidResponse
+		return Result(0), ErrUnexpectedRedisResponse
 	}
 	return Result(v), nil
 }
@@ -73,7 +74,7 @@ func (lock Lock) Unlock(ctx context.Context) (bool, error) {
 	}
 	v, ok := res.(int64)
 	if !ok {
-		return false, errInvalidResponse
+		return false, ErrUnexpectedRedisResponse
 	}
 	return v == 1, nil
 }
