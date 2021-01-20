@@ -55,16 +55,26 @@ func NewLocker(client RedisClient, ttl time.Duration, options ...Option) *Locker
 	return locker
 }
 
-// Lock creates new lock.
-func (locker *Locker) Lock(key string) (Lock, error) {
+// Lock creates and applies new lock.
+func (locker *Locker) Lock(ctx context.Context, key string) (LockResult, error) {
+	r := LockResult{}
 	buf := make([]byte, locker.randSize)
-	if _, err := io.ReadFull(locker.randReader, buf); err != nil {
-		return Lock{}, err
+	_, err := io.ReadFull(locker.randReader, buf)
+	if err != nil {
+		return r, err
 	}
-	return Lock{
+	r.Lock = Lock{
 		client: locker.client,
 		ttl:    locker.ttl,
 		key:    key,
 		token:  base64.URLEncoding.EncodeToString(buf),
-	}, nil
+	}
+	r.Result, err = r.Lock.Lock(ctx)
+	return r, err
+}
+
+// LockResult contains new lock and result of applying the lock.
+type LockResult struct {
+	Lock
+	Result
 }

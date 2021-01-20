@@ -27,17 +27,15 @@ func main() {
 		go func() {
 			defer wg.Done()
 
-			lock, err := l.Lock(key)
+			r, err := l.Lock(ctx, key)
 			requireNoError(err)
-			result, err := lock.Lock(ctx)
-			requireNoError(err)
-			if !result.OK() {
-				fmt.Printf("Failed to apply lock #%d, retry after %v\n", id, result.TTL())
+			if !r.OK() {
+				fmt.Printf("Failed to apply lock #%d, retry after %v\n", id, r.TTL())
 				return
 			}
 			fmt.Printf("Lock #%d applied\n", id)
 			time.Sleep(50 * time.Millisecond)
-			ok, err := lock.Unlock(ctx)
+			ok, err := r.Unlock(ctx)
 			requireNoError(err)
 			if !ok {
 				fmt.Printf("Failed to release lock #%d\n", id)
