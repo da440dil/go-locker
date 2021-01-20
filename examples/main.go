@@ -35,6 +35,14 @@ func main() {
 			}
 			fmt.Printf("Lock #%d applied\n", id)
 			time.Sleep(50 * time.Millisecond)
+			res, err := r.Lock.Lock(ctx)
+			requireNoError(err)
+			if !res.OK() {
+				fmt.Printf("Failed to extend lock #%d, retry after %v\n", id, res.TTL())
+				return
+			}
+			fmt.Printf("Lock #%d extended\n", id)
+			time.Sleep(50 * time.Millisecond)
 			ok, err := r.Unlock(ctx)
 			requireNoError(err)
 			if !ok {
@@ -47,9 +55,10 @@ func main() {
 	lockUnlock(1)
 	lockUnlock(2)
 	wg.Wait()
-	// Output:
+	// Output (may differ on each run because of concurrent execution):
 	// Lock #1 applied
 	// Failed to apply lock #2, retry after 99ms
+	// Lock #1 extended
 	// Lock #1 released
 }
 
