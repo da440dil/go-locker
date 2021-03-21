@@ -2,31 +2,20 @@ package locker
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 )
 
-var lockscr = redis.NewScript(`
-local token = redis.call("get", KEYS[1])
-if token == false then
-	redis.call("set", KEYS[1], ARGV[1], "px", ARGV[2])
-	return -3
-end
-if token == ARGV[1] then
-	redis.call("pexpire", KEYS[1], ARGV[2])
-	return -4
-end
-return redis.call("pttl", KEYS[1])
-`)
+//go:embed lock.lua
+var locksrc string
+var lockscr = redis.NewScript(locksrc)
 
-var unlockscr = redis.NewScript(`
-if redis.call("get", KEYS[1]) == ARGV[1] then
-	return redis.call("del", KEYS[1])
-end
-return 0
-`)
+//go:embed unlock.lua
+var unlocksrc string
+var unlockscr = redis.NewScript(unlocksrc)
 
 // Result of applying a lock.
 type Result int64
