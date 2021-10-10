@@ -17,16 +17,15 @@ var lockscr = redis.NewScript(locksrc)
 var unlocksrc string
 var unlockscr = redis.NewScript(unlocksrc)
 
-// Result of applying a lock.
+// Result of locking a lock.
 type Result int64
 
-// OK is operation success flag.
+// OK is success flag of locking a lock.
 func (r Result) OK() bool {
 	return r < -2
 }
 
-// TTL of a lock.
-// Makes sense if operation failed, otherwise ttl is less than 0.
+// TTL of a lock. Makes sense if operation failed, otherwise ttl is less than 0.
 func (r Result) TTL() time.Duration {
 	return time.Duration(r) * time.Millisecond
 }
@@ -36,15 +35,14 @@ var ErrUnexpectedRedisResponse = errors.New("locker: unexpected redis response")
 
 // Lock implements distributed locking.
 type Lock struct {
-	client RedisClient
-	ttl    int
+	locker *Locker
 	key    string
-	token  string
+	value  string
 }
 
-// Lock applies the lock.
+// Lock locks the lock if it is not already locked, otherwise extends the lock TTL.
 func (lock Lock) Lock(ctx context.Context) (Result, error) {
-	res, err := lockscr.Run(ctx, lock.client, []string{lock.key}, lock.token, lock.ttl).Result()
+	res, err := lockscr.Run(ctx, lock.locker.client, []string{lock.key}, lock.value, lock.locker.ttl).Result()
 	if err != nil {
 		return Result(0), err
 	}
@@ -55,9 +53,9 @@ func (lock Lock) Lock(ctx context.Context) (Result, error) {
 	return Result(v), nil
 }
 
-// Unlock releases the lock.
+// Unlock unlocks the lock.
 func (lock Lock) Unlock(ctx context.Context) (bool, error) {
-	res, err := unlockscr.Run(ctx, lock.client, []string{lock.key}, lock.token).Result()
+	res, err := unlockscr.Run(ctx, lock.locker.client, []string{lock.key}, lock.value).Result()
 	if err != nil {
 		return false, err
 	}

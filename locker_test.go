@@ -35,23 +35,22 @@ func (m *ClientMock) ScriptLoad(ctx context.Context, script string) *redis.Strin
 func TestLocker(t *testing.T) {
 	clientMock := &ClientMock{}
 	ttl := 500
-	locker := NewLocker(clientMock, msToDuration(ttl), WithRandReader(strings.NewReader("qwerty")), WithRandSize(6))
-	require.IsType(t, &Locker{}, locker)
+	locker := NewLocker(clientMock, msToDuration(ttl))
+	locker.randReader = strings.NewReader("qwertyqwertyqwer")
 
 	ctx := context.Background()
 	key := "key"
-	token := "cXdlcnR5"
+	value := "cXdlcnR5cXdlcnR5cXdlcg=="
 	keys := []string{key}
-	clientMock.On("EvalSha", ctx, lockscr.Hash(), keys, token, ttl).Return(redis.NewCmdResult(interface{}(int64(-3)), nil))
+	clientMock.On("EvalSha", ctx, lockscr.Hash(), keys, value, ttl).Return(redis.NewCmdResult(interface{}(int64(-3)), nil))
 
 	r, err := locker.Lock(ctx, key)
 	require.NoError(t, err)
-	require.IsType(t, LockResult{}, r)
-	require.Equal(t, token, r.token)
+	require.Equal(t, value, r.value)
 
 	clientMock.AssertExpectations(t)
 
-	locker = NewLocker(clientMock, msToDuration(ttl), WithRandReader(strings.NewReader("")))
+	locker.randReader = strings.NewReader("")
 	_, err = locker.Lock(ctx, key)
 	require.Equal(t, io.EOF, err)
 }

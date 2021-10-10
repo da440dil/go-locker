@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -24,56 +25,49 @@ type Locker struct {
 	client     RedisClient
 	ttl        int
 	randReader io.Reader
-	randSize   int
-}
-
-// Option is function for setting locker options.
-type Option func(locker *Locker)
-
-// WithRandReader sets random generator to generate a lock token.
-// By default equals crypto/rand.Reader.
-func WithRandReader(r io.Reader) Option {
-	return func(locker *Locker) {
-		locker.randReader = r
-	}
-}
-
-// WithRandSize sets bytes size to read from random generator to generate a lock token.
-// Must be greater than 0. By default equals 16.
-func WithRandSize(n int) Option {
-	return func(locker *Locker) {
-		locker.randSize = n
-	}
+	buf        []byte
+	mu         sync.Mutex
 }
 
 // NewLocker creates new locker.
-func NewLocker(client RedisClient, ttl time.Duration, options ...Option) *Locker {
-	locker := &Locker{client, int(ttl / time.Millisecond), rand.Reader, 16}
-	for _, fn := range options {
-		fn(locker)
+func NewLocker(client RedisClient, ttl time.Duration) *Locker {
+	return &Locker{
+		client:     client,
+		ttl:        int(ttl / time.Millisecond),
+		randReader: rand.Reader,
+		buf:        make([]byte, 16),
 	}
-	return locker
 }
 
-// Lock creates and applies new lock.
+// Lock creates and locks new lock.
 func (locker *Locker) Lock(ctx context.Context, key string) (LockResult, error) {
 	r := LockResult{}
-	buf := make([]byte, locker.randSize)
-	_, err := io.ReadFull(locker.randReader, buf)
+	value, err := locker.randomString()
 	if err != nil {
 		return r, err
 	}
 	r.Lock = Lock{
-		client: locker.client,
-		ttl:    locker.ttl,
+		locker: locker,
 		key:    key,
-		token:  base64.URLEncoding.EncodeToString(buf),
+		value:  value,
 	}
 	r.Result, err = r.Lock.Lock(ctx)
 	return r, err
 }
 
-// LockResult contains new lock and result of applying the lock.
+// randomString creates random string to use as lock key value
+func (locker *Locker) randomString() (string, error) {
+	locker.mu.Lock()
+	defer locker.mu.Unlock()
+
+	_, err := locker.randReader.Read(locker.buf)
+	if err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(locker.buf), nil
+}
+
+// LockResult contains new lock and result of locking the lock.
 type LockResult struct {
 	Lock
 	Result

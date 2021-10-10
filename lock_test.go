@@ -20,8 +20,9 @@ func TestLock(t *testing.T) {
 	require.NoError(t, err)
 
 	ttl := 500
+	locker := NewLocker(client, msToDuration(ttl))
 
-	lock1 := &Lock{client, ttl, key, "token1"}
+	lock1 := &Lock{locker, key, "token1"}
 	result, err := lock1.Lock(ctx)
 	require.NoError(t, err)
 	require.True(t, result.OK())
@@ -32,7 +33,7 @@ func TestLock(t *testing.T) {
 	require.True(t, result.OK())
 	require.Equal(t, msToDuration(-4), result.TTL())
 
-	lock2 := &Lock{client, ttl, key, "token2"}
+	lock2 := &Lock{locker, key, "token2"}
 	result, err = lock2.Lock(ctx)
 	require.NoError(t, err)
 	require.False(t, result.OK())
@@ -54,9 +55,10 @@ func TestLock(t *testing.T) {
 	require.True(t, ok)
 
 	clientMock := &ClientMock{}
+	locker.client = clientMock
 
 	token := "token"
-	lock := &Lock{clientMock, ttl, key, token}
+	lock := &Lock{locker, key, token}
 	keys := []string{key}
 
 	e := errors.New("redis error")
@@ -68,7 +70,7 @@ func TestLock(t *testing.T) {
 	require.Equal(t, e, err)
 
 	token = ""
-	lock = &Lock{clientMock, ttl, key, token}
+	lock = &Lock{locker, key, token}
 	clientMock.On("EvalSha", ctx, lockscr.Hash(), keys, token, ttl).Return(redis.NewCmdResult("", nil))
 	_, err = lock.Lock(ctx)
 	require.Equal(t, ErrUnexpectedRedisResponse, err)

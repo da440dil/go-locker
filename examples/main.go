@@ -19,31 +19,30 @@ func main() {
 	err := client.Del(ctx, key).Err()
 	requireNoError(err)
 
-	l := locker.NewLocker(client, 100*time.Millisecond)
+	lkr := locker.NewLocker(client, 100*time.Millisecond)
 
 	var wg sync.WaitGroup
 	lockUnlock := func(id int) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-
-			r, err := l.Lock(ctx, key)
+			lr, err := lkr.Lock(ctx, key)
 			requireNoError(err)
-			if !r.OK() {
-				fmt.Printf("Failed to apply lock #%d, retry after %v\n", id, r.TTL())
+			if !lr.OK() {
+				fmt.Printf("Failed to apply lock #%d, retry after %v\n", id, lr.TTL())
 				return
 			}
 			fmt.Printf("Lock #%d applied\n", id)
 			time.Sleep(50 * time.Millisecond)
-			res, err := r.Lock.Lock(ctx)
+			r, err := lr.Lock.Lock(ctx)
 			requireNoError(err)
-			if !res.OK() {
-				fmt.Printf("Failed to extend lock #%d, retry after %v\n", id, res.TTL())
+			if !r.OK() {
+				fmt.Printf("Failed to extend lock #%d, retry after %v\n", id, r.TTL())
 				return
 			}
 			fmt.Printf("Lock #%d extended\n", id)
 			time.Sleep(50 * time.Millisecond)
-			ok, err := r.Unlock(ctx)
+			ok, err := lr.Unlock(ctx)
 			requireNoError(err)
 			if !ok {
 				fmt.Printf("Failed to release lock #%d\n", id)
