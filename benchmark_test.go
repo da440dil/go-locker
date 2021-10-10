@@ -19,11 +19,11 @@ func Benchmark(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	locker := NewLocker(client, 100*time.Millisecond)
+	locker := NewLocker(client)
 
 	b.Run("Locker.Lock", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			locker.Lock(ctx, key)
+			locker.Lock(ctx, key, time.Millisecond)
 		}
 	})
 
@@ -32,15 +32,15 @@ func Benchmark(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	locker = NewLocker(client, time.Second)
-	lr, err := locker.Lock(ctx, key)
+	locker = NewLocker(client)
+	lr, err := locker.Lock(ctx, key, time.Second)
 	if err != nil {
 		b.Fatal(err)
 	}
 
 	b.Run("Lock.Lock", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			lr.Lock.Lock(ctx)
+			lr.Lock.Lock(ctx, time.Second)
 		}
 	})
 
@@ -49,7 +49,7 @@ func Benchmark(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	lr, err = locker.Lock(ctx, key)
+	lr, err = locker.Lock(ctx, key, time.Second)
 	if err != nil {
 		b.Fatal(err)
 	}

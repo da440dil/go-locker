@@ -23,24 +23,22 @@ type RedisClient interface {
 // Locker defines parameters for creating new lock.
 type Locker struct {
 	client     RedisClient
-	ttl        int
 	randReader io.Reader
 	buf        []byte
 	mu         sync.Mutex
 }
 
 // NewLocker creates new locker.
-func NewLocker(client RedisClient, ttl time.Duration) *Locker {
+func NewLocker(client RedisClient) *Locker {
 	return &Locker{
 		client:     client,
-		ttl:        int(ttl / time.Millisecond),
 		randReader: rand.Reader,
 		buf:        make([]byte, 16),
 	}
 }
 
-// Lock creates and locks new lock.
-func (locker *Locker) Lock(ctx context.Context, key string) (LockResult, error) {
+// Lock creates and applies new lock.
+func (locker *Locker) Lock(ctx context.Context, key string, ttl time.Duration) (LockResult, error) {
 	r := LockResult{}
 	value, err := locker.randomString()
 	if err != nil {
@@ -51,7 +49,7 @@ func (locker *Locker) Lock(ctx context.Context, key string) (LockResult, error) 
 		key:    key,
 		value:  value,
 	}
-	r.Result, err = r.Lock.Lock(ctx)
+	r.Result, err = r.Lock.Lock(ctx, ttl)
 	return r, err
 }
 
@@ -67,7 +65,7 @@ func (locker *Locker) randomString() (string, error) {
 	return base64.URLEncoding.EncodeToString(locker.buf), nil
 }
 
-// LockResult contains new lock and result of locking the lock.
+// LockResult contains new lock and result of applying a lock.
 type LockResult struct {
 	Lock
 	Result

@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/mock"
@@ -34,23 +35,23 @@ func (m *ClientMock) ScriptLoad(ctx context.Context, script string) *redis.Strin
 
 func TestLocker(t *testing.T) {
 	clientMock := &ClientMock{}
-	ttl := 500
-	locker := NewLocker(clientMock, msToDuration(ttl))
+	locker := NewLocker(clientMock)
 	locker.randReader = strings.NewReader("qwertyqwertyqwer")
 
 	ctx := context.Background()
 	key := "key"
+	ttl := 500 * time.Millisecond
 	value := "cXdlcnR5cXdlcnR5cXdlcg=="
 	keys := []string{key}
-	clientMock.On("EvalSha", ctx, lockscr.Hash(), keys, value, ttl).Return(redis.NewCmdResult(interface{}(int64(-3)), nil))
+	clientMock.On("EvalSha", ctx, lockscr.Hash(), keys, value, int(ttl/time.Millisecond)).Return(redis.NewCmdResult(interface{}(int64(-3)), nil))
 
-	r, err := locker.Lock(ctx, key)
+	r, err := locker.Lock(ctx, key, ttl)
 	require.NoError(t, err)
 	require.Equal(t, value, r.value)
 
 	clientMock.AssertExpectations(t)
 
 	locker.randReader = strings.NewReader("")
-	_, err = locker.Lock(ctx, key)
+	_, err = locker.Lock(ctx, key, ttl)
 	require.Equal(t, io.EOF, err)
 }

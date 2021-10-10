@@ -17,10 +17,10 @@ var lockscr = redis.NewScript(locksrc)
 var unlocksrc string
 var unlockscr = redis.NewScript(unlocksrc)
 
-// Result of locking a lock.
+// Result of applying a lock.
 type Result int64
 
-// OK is success flag of locking a lock.
+// OK is success flag of applying a lock.
 func (r Result) OK() bool {
 	return r < -2
 }
@@ -40,9 +40,9 @@ type Lock struct {
 	value  string
 }
 
-// Lock locks the lock if it is not already locked, otherwise extends the lock TTL.
-func (lock Lock) Lock(ctx context.Context) (Result, error) {
-	res, err := lockscr.Run(ctx, lock.locker.client, []string{lock.key}, lock.value, lock.locker.ttl).Result()
+// Lock applies the lock if it is not already applied, otherwise extends the lock TTL.
+func (lock Lock) Lock(ctx context.Context, ttl time.Duration) (Result, error) {
+	res, err := lockscr.Run(ctx, lock.locker.client, []string{lock.key}, lock.value, int(ttl/time.Millisecond)).Result()
 	if err != nil {
 		return Result(0), err
 	}
@@ -53,7 +53,7 @@ func (lock Lock) Lock(ctx context.Context) (Result, error) {
 	return Result(v), nil
 }
 
-// Unlock unlocks the lock.
+// Unlock releases the lock.
 func (lock Lock) Unlock(ctx context.Context) (bool, error) {
 	res, err := unlockscr.Run(ctx, lock.locker.client, []string{lock.key}, lock.value).Result()
 	if err != nil {
