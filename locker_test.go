@@ -2,6 +2,7 @@ package locker
 
 import (
 	"context"
+	"crypto/rand"
 	"io"
 	"strings"
 	"testing"
@@ -34,9 +35,14 @@ func (m *ClientMock) ScriptLoad(ctx context.Context, script string) *redis.Strin
 }
 
 func TestLocker(t *testing.T) {
+	randReader := rand.Reader
+	rand.Reader = strings.NewReader("qwertyqwertyqwer")
+	defer func() {
+		rand.Reader = randReader
+	}()
+
 	clientMock := &ClientMock{}
 	locker := NewLocker(clientMock)
-	locker.randReader = strings.NewReader("qwertyqwertyqwer")
 
 	ctx := context.Background()
 	key := "key"
@@ -51,7 +57,6 @@ func TestLocker(t *testing.T) {
 
 	clientMock.AssertExpectations(t)
 
-	locker.randReader = strings.NewReader("")
 	_, err = locker.Lock(ctx, key, ttl)
 	require.Equal(t, io.EOF, err)
 }

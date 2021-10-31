@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"io"
 	"sync"
 	"time"
 
@@ -22,18 +21,16 @@ type RedisClient interface {
 
 // Locker defines parameters for creating new lock.
 type Locker struct {
-	client     RedisClient
-	randReader io.Reader
-	buf        []byte
-	mu         sync.Mutex
+	client RedisClient
+	buf    []byte
+	mu     sync.Mutex
 }
 
 // NewLocker creates new locker.
 func NewLocker(client RedisClient) *Locker {
 	return &Locker{
-		client:     client,
-		randReader: rand.Reader,
-		buf:        make([]byte, 16),
+		client: client,
+		buf:    make([]byte, 16),
 	}
 }
 
@@ -58,7 +55,7 @@ func (locker *Locker) randomString() (string, error) {
 	locker.mu.Lock()
 	defer locker.mu.Unlock()
 
-	_, err := locker.randReader.Read(locker.buf)
+	_, err := rand.Reader.Read(locker.buf)
 	if err != nil {
 		return "", err
 	}
